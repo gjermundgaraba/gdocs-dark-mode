@@ -12,10 +12,11 @@ export const createManifest = (version: string): chrome.runtime.ManifestV3 => ({
   name: "Google Docs Dark Mode",
   version,
   description:
-    "Themes Google Docs, including the document page, with the gg dark palette.",
+    "Themes Google Docs, including the document page, with the gg dark palette or your own colours.",
   minimum_chrome_version: String(minimumChromeVersion),
   permissions: ["scripting", "storage"],
   host_permissions: [documentUrlPattern],
   background: { service_worker: files.background },
   action: { default_title: "Google Docs dark mode" },
+  options_ui: { page: files.optionsPage, open_in_tab: true },
 });

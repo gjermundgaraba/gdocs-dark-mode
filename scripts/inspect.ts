@@ -37,7 +37,7 @@ const minimumOpacity = 0.5;
 
 await mkdir(outDir, { recursive: true });
 
-const context = await launchWithExtension(headed);
+const { context } = await launchWithExtension(headed);
 
 try {
   const page = await openWithDiagnostics(context, url);

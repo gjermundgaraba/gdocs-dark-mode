@@ -16,6 +16,13 @@ export interface ColorRecord {
   readonly count: number;
 }
 
+/**
+ * What became of the saved palette: still `waiting` for the bridge to hand it
+ * over, `applied`, or not applied because it was `malformed` or gg-theme could
+ * not derive its tiers (`underivable`).
+ */
+export type PaletteState = "waiting" | "applied" | "malformed" | "underivable";
+
 export interface DiagnosticsReport {
   /** Draw calls on canvases the hook recoloured, by method. Empty means the hook never reached the page. */
   readonly recolouredDraws: Partial<Record<DrawMethod, number>>;
@@ -29,9 +36,13 @@ export interface DiagnosticsReport {
   readonly offscreenTransfers: number;
   /** Whether `<html>` still carries the dark-mode class. */
   readonly darkModeClassPresent: boolean;
+  readonly palette: PaletteState;
+  /** Page draws made with the built-in theme before the saved palette arrived. Should be 0. */
+  readonly drawsBeforePalette: number;
 }
 
 export interface Diagnostics extends DrawObserver {
+  readonly notePalette: (state: Exclude<PaletteState, "waiting">) => void;
   readonly report: () => DiagnosticsReport;
 }
 
@@ -68,6 +79,8 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
   >();
 
   let offscreenTransfers = 0;
+  let palette: PaletteState = "waiting";
+  let drawsBeforePalette = 0;
 
   const transfer = HTMLCanvasElement.prototype.transferControlToOffscreen;
   HTMLCanvasElement.prototype.transferControlToOffscreen =
@@ -81,6 +94,10 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
     onDraw: (method, canvas, recoloured) => {
       if (recoloured) {
         increment(recolouredDraws, method);
+
+        if (palette === "waiting") {
+          drawsBeforePalette += 1;
+        }
       } else {
         increment(otherCanvasDraws, canvas.className || "(none)");
       }
@@ -97,6 +114,9 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
 
       record.count += 1;
       colors.set(key, record);
+    },
+    notePalette: (state) => {
+      palette = state;
     },
     report: () => {
       const seen = [...colors.values()]
@@ -115,6 +135,8 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
         offscreenTransfers,
         darkModeClassPresent:
           document.documentElement.classList.contains(darkModeClass),
+        palette,
+        drawsBeforePalette,
       };
     },
   };

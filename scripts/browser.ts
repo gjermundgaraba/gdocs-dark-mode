@@ -5,13 +5,20 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import type { BrowserContext, Page } from "playwright";
 
+import { scriptIds } from "../src/background/registration.ts";
+import { pageCanvasClass } from "../src/docs/docs.ts";
+import { files } from "../src/extension/files.ts";
 import { debugStorageKey } from "../src/page/diagnostics.ts";
 import type { DiagnosticsReport } from "../src/page/diagnostics.ts";
+import { paletteKey } from "../src/settings/settings.ts";
+import { defaultPalette, parsePalette } from "../src/theme/palette.ts";
+import type { Palette } from "../src/theme/palette.ts";
 import { publicDocUrl, referenceDocUrl } from "./reference-doc.ts";
 
 const root = path.join(import.meta.dirname, "..");
 const pollIntervalMs = 250;
 const timeoutMs = 30_000;
+const reloadSettleMs = 2000;
 
 /** The unpacked extension, built by `pnpm run build`. */
 export const extensionDir = path.join(root, "dist");
@@ -76,33 +83,17 @@ export const waitUntil = async (
   throw new Error(`timed out waiting for ${label}`);
 };
 
-const waitForPageScriptRegistration = async (
-  context: BrowserContext
-): Promise<void> => {
-  const worker =
-    context.serviceWorkers()[0] ??
-    (await context.waitForEvent("serviceworker"));
+export interface LoadedExtension {
+  readonly context: BrowserContext;
+  /** The extension's options page, open in its own tab; it can call every API the extension may. */
+  readonly optionsPage: Page;
+}
 
-  await waitUntil("the page script to be registered", async () => {
-    const registered = await worker.evaluate(async () => {
-      const scripts = await chrome.scripting.getRegisteredContentScripts();
-
-      return scripts.length;
-    });
-
-    return registered > 0;
-  });
-};
-
-/**
- * Playwright's Chromium with the built extension loaded, once the extension
- * has registered its page script; a document opened earlier would load
- * unthemed.
- */
-export const launchWithExtension = async (
-  headed: boolean
-): Promise<BrowserContext> => {
-  const context = await chromium.launchPersistentContext(profileDir, {
+const launch = async (
+  headed: boolean,
+  profile: string
+): Promise<BrowserContext> =>
+  await chromium.launchPersistentContext(profile, {
     channel: "chromium",
     headless: !headed,
     viewport: { width: 1400, height: 1000 },
@@ -112,15 +103,100 @@ export const launchWithExtension = async (
     ],
   });
 
-  await waitForPageScriptRegistration(context);
+const reloadExtension = async (profile: string): Promise<string> => {
+  const context = await launch(false, profile);
 
-  return context;
+  try {
+    const worker =
+      context.serviceWorkers()[0] ??
+      (await context.waitForEvent("serviceworker"));
+
+    const closed = worker.waitForEvent("close");
+
+    await worker
+      .evaluate(() => {
+        chrome.runtime.reload();
+      })
+      .catch(async () => await closed);
+    await closed;
+    await sleep(reloadSettleMs);
+
+    return new URL(worker.url()).host;
+  } finally {
+    await context.close();
+  }
+};
+
+const openOptionsPage = async (
+  context: BrowserContext,
+  extensionId: string
+): Promise<Page> => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/${files.optionsPage}`);
+
+  return page;
+};
+
+const waitForRegistration = async (optionsPage: Page): Promise<void> => {
+  const expected = scriptIds.toSorted().join(",");
+
+  await waitUntil("the page scripts to be registered", async () => {
+    const registered = await optionsPage.evaluate(async () => {
+      const scripts = await chrome.scripting.getRegisteredContentScripts();
+
+      return scripts.map(({ id }) => id);
+    });
+
+    return registered.toSorted().join(",") === expected;
+  });
+};
+
+/**
+ * Playwright's Chromium with the built extension loaded, once the extension
+ * has registered its page scripts; a document opened earlier would load
+ * unthemed. It first reloads the extension in a separate launch, as
+ * chrome://extensions' Reload would, which clears scripts registered by an
+ * earlier build. Uses the shared profile unless given another.
+ */
+export const launchWithExtension = async (
+  headed: boolean,
+  profile = profileDir
+): Promise<LoadedExtension> => {
+  const extensionId = await reloadExtension(profile);
+  const context = await launch(headed, profile);
+  const optionsPage = await openOptionsPage(context, extensionId);
+  await waitForRegistration(optionsPage);
+
+  return { context, optionsPage };
+};
+
+/** The palette the extension has saved in this profile, as the page receives it. */
+export const readSavedPalette = async (optionsPage: Page): Promise<Palette> => {
+  const stored = await optionsPage.evaluate(async (key) => {
+    const items = await chrome.storage.local.get(key);
+
+    return items[key];
+  }, paletteKey);
+
+  return parsePalette(stored) ?? defaultPalette;
 };
 
 export const readReport = async (
   page: Page
 ): Promise<DiagnosticsReport | undefined> =>
   await page.evaluate(() => globalThis.gdocsDarkMode?.report());
+
+/** Waits until a document opened with diagnostics has drawn its page and settled. */
+export const waitForDocsToDraw = async (page: Page): Promise<void> => {
+  await waitUntil("Docs to draw its page", async () => {
+    const report = await readReport(page);
+
+    return (
+      report !== undefined && Object.keys(report.recolouredDraws).length > 0
+    );
+  });
+  await page.waitForTimeout(3000);
+};
 
 /** Opens `url` with diagnostics on and waits until Docs has drawn and settled. */
 export const openWithDiagnostics = async (
@@ -140,14 +216,30 @@ export const openWithDiagnostics = async (
     localStorage.setItem(key, "1");
   }, debugStorageKey);
   await page.reload({ waitUntil: "load" });
-  await waitUntil("Docs to draw its page", async () => {
-    const report = await readReport(page);
-
-    return (
-      report !== undefined && Object.keys(report.recolouredDraws).length > 0
-    );
-  });
-  await page.waitForTimeout(3000);
+  await waitForDocsToDraw(page);
 
   return page;
 };
+
+/**
+ * The first page tile's colour inside the top margin, where nothing but the
+ * blank page is drawn, as `#rrggbb`, or a description of why it is not one.
+ */
+export const readPageMarginPixel = async (page: Page): Promise<string> =>
+  await page.evaluate((canvasClass) => {
+    const canvas = document.querySelector(`canvas.${canvasClass}`);
+
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return "no page canvas";
+    }
+
+    try {
+      const pixel = canvas.getContext("2d")?.getImageData(24, 24, 1, 1).data;
+      const [r = 0, g = 0, b = 0, a = 0] = pixel ?? [];
+      const hex = `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+
+      return a === 255 ? hex : `${hex} at alpha ${a}`;
+    } catch (error) {
+      return `unreadable (${String(error)})`;
+    }
+  }, pageCanvasClass);

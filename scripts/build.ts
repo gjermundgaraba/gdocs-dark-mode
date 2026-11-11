@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { build } from "vite";
@@ -9,15 +9,15 @@ import {
   createManifest,
   minimumChromeVersion,
 } from "../src/extension/manifest.ts";
-import { theme } from "../src/theme/theme.ts";
-import { renderDocsCss } from "../src/ui/docs-css.ts";
 
 const root = path.join(import.meta.dirname, "..");
 const dist = path.join(root, "dist");
 
 const scripts = [
   { entry: "src/page/main.ts", output: files.page },
+  { entry: "src/page/bridge.ts", output: files.bridge },
   { entry: "src/background/background.ts", output: files.background },
+  { entry: "src/options/options.ts", output: files.options },
 ] as const;
 
 const bundleAsClassicScript = async (
@@ -51,7 +51,10 @@ for (const { entry, output } of scripts) {
   await bundleAsClassicScript(entry, output);
 }
 
-await writeFile(path.join(dist, files.stylesheet), renderDocsCss(theme));
+await copyFile(
+  path.join(root, "src/options/options.html"),
+  path.join(dist, files.optionsPage)
+);
 
 await writeFile(
   path.join(dist, "manifest.json"),

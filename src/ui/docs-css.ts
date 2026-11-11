@@ -1,7 +1,9 @@
+import type { HueName } from "@gjermundgaraba/gg-theme/derive";
+
 import { mix, rgb, toHex, toRgbTriplet } from "../color/color.ts";
 import type { Rgba } from "../color/color.ts";
 import { ownCaretSelector, pageSelector } from "../docs/docs.ts";
-import type { HueName, Theme } from "../theme/theme.ts";
+import type { Theme } from "../theme/theme.ts";
 
 const black = rgb(0, 0, 0);
 
@@ -30,7 +32,7 @@ const materialTokens = (theme: Theme) => {
     "on-surface-variant": theme.fgDim,
     "inverse-surface": theme.fg,
     "inverse-on-surface": theme.bg,
-    "inverse-primary": theme.inverseAccent,
+    "inverse-primary": accent.tint,
     outline: theme.overlay,
     "outline-variant": theme.surface,
     primary: accent.base,

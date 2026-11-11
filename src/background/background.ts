@@ -1,26 +1,47 @@
-import { theme } from "../theme/theme.ts";
+import {
+  paletteKey,
+  readEnabled,
+  readPalette,
+  writeEnabled,
+} from "../settings/settings.ts";
+import { createTheme, defaultTheme } from "../theme/theme.ts";
+import type { Theme } from "../theme/theme.ts";
 import { showState } from "./icon.ts";
 import { reloadDocuments, syncRegistration } from "./registration.ts";
-import { readEnabled, writeEnabled } from "./state.ts";
 
-const apply = async (enabled: boolean): Promise<void> => {
-  await syncRegistration(enabled);
-  await showState(theme, enabled);
+const savedTheme = async (): Promise<Theme> => {
+  const palette = await readPalette();
+
+  try {
+    return createTheme(palette);
+  } catch {
+    return defaultTheme;
+  }
+};
+
+const showCurrentState = async (): Promise<void> => {
+  await showState(await savedTheme(), await readEnabled());
 };
 
 const toggle = async (): Promise<void> => {
   const enabled = !(await readEnabled());
   await writeEnabled(enabled);
-  await apply(enabled);
+  await syncRegistration(enabled);
+  await showCurrentState();
   await reloadDocuments();
 };
 
 const reregisterAfterInstallOrUpdate = async (): Promise<void> => {
-  await apply(await readEnabled());
+  await syncRegistration(await readEnabled());
+  await showCurrentState();
 };
 
-const redrawIconAfterBrowserStart = async (): Promise<void> => {
-  await showState(theme, await readEnabled());
+const applySavedPalette = async (): Promise<void> => {
+  await showCurrentState();
+
+  if (await readEnabled()) {
+    await reloadDocuments();
+  }
 };
 
 const report = (error: unknown): void => {
@@ -32,9 +53,15 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  redrawIconAfterBrowserStart().catch(report);
+  showCurrentState().catch(report);
 });
 
 chrome.action.onClicked.addListener(() => {
   toggle().catch(report);
+});
+
+chrome.storage.local.onChanged.addListener((changes) => {
+  if (paletteKey in changes) {
+    applySavedPalette().catch(report);
+  }
 });

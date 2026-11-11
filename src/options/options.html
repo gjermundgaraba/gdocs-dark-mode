@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Google Docs Dark Mode options</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+
+      body {
+        max-width: 46rem;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+        margin: 0 0 0.25rem;
+      }
+
+      h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 1.75rem 0 0.5rem;
+      }
+
+      p {
+        color: var(--fg-dim);
+        margin: 0 0 1rem;
+      }
+
+      code,
+      label,
+      input[type="text"] {
+        font-family: ui-monospace, monospace;
+      }
+
+      .colours {
+        display: grid;
+        grid-template-columns: 9rem auto 7rem 1fr;
+        gap: 0.4rem 0.75rem;
+        align-items: center;
+      }
+
+      input[type="color"] {
+        inline-size: 2.5rem;
+        block-size: 1.75rem;
+        padding: 0;
+        border: 1px solid var(--overlay);
+        border-radius: 4px;
+        background: var(--surface);
+      }
+
+      input[type="text"],
+      button,
+      .import {
+        font-size: inherit;
+        background: var(--surface);
+        color: var(--fg);
+        border: 1px solid var(--overlay);
+        border-radius: 6px;
+      }
+
+      input[type="text"] {
+        padding: 0.2rem 0.4rem;
+      }
+
+      input[aria-invalid="true"] {
+        border-color: var(--error);
+      }
+
+      .sample {
+        justify-self: start;
+        padding: 0 0.5rem;
+        border-radius: 4px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin: 1.75rem 0 1rem;
+      }
+
+      button,
+      .import {
+        font-family: inherit;
+        padding: 0.35rem 0.9rem;
+        cursor: pointer;
+      }
+
+      .import input {
+        display: none;
+      }
+
+      #save {
+        background: var(--accent-tint);
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      #status {
+        color: var(--fg-dim);
+      }
+
+      ul {
+        margin: 0.25rem 0;
+        padding-left: 1.25rem;
+      }
+
+      #errors {
+        color: var(--error);
+      }
+
+      #warnings {
+        color: var(--warning);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Google Docs Dark Mode</h1>
+    <p>
+      Set the colours Docs is themed with, or import them from a gg-theme
+      <code>tokens.json</code>. The washes, tints and soft colours are derived
+      from these the way gg-theme derives them. Saving reloads open documents.
+    </p>
+
+    <h2>Base</h2>
+    <div class="colours" id="base"></div>
+
+    <h2>Hues</h2>
+    <p>
+      Each sample is the hue's soft colour on its tint: coloured text and
+      highlights in a document are drawn with these.
+    </p>
+    <div class="colours" id="hues"></div>
+
+    <div class="actions">
+      <label class="import"
+        >Import tokens.json…<input
+          type="file"
+          id="import"
+          accept=".json,application/json"
+      /></label>
+      <button type="button" id="default">Use gg default</button>
+      <button type="button" id="revert">Revert</button>
+      <button type="button" id="save">Save</button>
+      <span id="status" role="status"></span>
+    </div>
+
+    <ul id="errors"></ul>
+    <ul id="warnings"></ul>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,3 +1,6 @@
+import { hueNames } from "@gjermundgaraba/gg-theme/derive";
+import type { HueName } from "@gjermundgaraba/gg-theme/derive";
+
 import {
   contrast,
   hueDistance,
@@ -11,8 +14,7 @@ import {
 } from "../color/color.ts";
 import type { Rgba } from "../color/color.ts";
 import type { CanvasColorMeaning, KnownCanvasColor } from "../docs/docs.ts";
-import { hueNames } from "../theme/theme.ts";
-import type { HueName, Theme } from "../theme/theme.ts";
+import type { Theme } from "../theme/theme.ts";
 
 /**
  * What a colour is drawn for: `ink` is text, strokes and hairlines; `paper` is

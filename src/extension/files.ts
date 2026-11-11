@@ -2,5 +2,7 @@
 export const files = {
   background: "background.js",
   page: "page.js",
-  stylesheet: "docs.css",
+  bridge: "bridge.js",
+  options: "options.js",
+  optionsPage: "options.html",
 } as const;

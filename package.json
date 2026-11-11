@@ -10,7 +10,8 @@
     "sign-in": "vpx ./scripts/sign-in.ts",
     "ready": "vp check && vp test && vp run build",
     "prepare": "vp config && effect-tsgo patch --no-typescript --oxlint",
-    "inspect": "vpx ./scripts/build.ts && vpx ./scripts/inspect.ts"
+    "inspect": "vpx ./scripts/build.ts && vpx ./scripts/inspect.ts",
+    "verify-options": "vpx ./scripts/build.ts && vpx ./scripts/verify-options.ts"
   },
   "devDependencies": {
     "@clanker-stuff/oxlint-config": "catalog:",

@@ -1,25 +1,15 @@
-import tokens from "@gjermundgaraba/gg-theme/tokens" with { type: "json" };
+import { deriveTiers } from "@gjermundgaraba/gg-theme/derive";
+import type { HueName } from "@gjermundgaraba/gg-theme/derive";
 
 import { parseHex } from "../color/color.ts";
 import type { Rgba } from "../color/color.ts";
-
-export const hueNames = [
-  "accent",
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "cyan",
-  "blue",
-  "magenta",
-] as const;
-
-export type HueName = (typeof hueNames)[number];
+import { defaultPalette } from "./palette.ts";
+import type { Palette } from "./palette.ts";
 
 export interface HueTiers {
-  /** The palette colour itself: vivid, readable as text on BG, Surface and Tints. */
+  /** The palette colour itself. */
   readonly base: Rgba;
-  /** Calmer than base; readable as text on BG, Surface and Washes. */
+  /** Calmer than base; gg-theme makes it readable as text on BG, Surface and Washes. */
   readonly soft: Rgba;
   /** Receding: borders and de-emphasised text. */
   readonly quiet: Rgba;
@@ -37,46 +27,56 @@ export interface Theme {
   readonly fgDim: Rgba;
   readonly fg: Rgba;
   readonly selectionBg: Rgba;
-  /** The light theme's accent, for the rare control drawn on an inverse (light) surface. */
-  readonly inverseAccent: Rgba;
   readonly hues: Readonly<Record<HueName, HueTiers>>;
 }
 
-const palette = tokens.palette.dark;
-const tiers = tokens.tiers.dark;
+const tier = (tiers: Readonly<Record<string, string>>, name: string): Rgba => {
+  const color = tiers[name];
 
-const hueTiers = (hue: HueName): HueTiers => ({
-  base: parseHex(palette[hue]),
-  soft: parseHex(tiers[`soft-${hue}`]),
-  quiet: parseHex(tiers[`quiet-${hue}`]),
-  wash: parseHex(tiers[`wash-${hue}`]),
-  tint: parseHex(tiers[`tint-${hue}`]),
-});
+  if (color === undefined) {
+    throw new Error(`gg-theme derived no ${name} tier`);
+  }
+
+  return parseHex(color);
+};
 
 /**
- * The gg dark theme, read from `@gjermundgaraba/gg-theme`'s tokens at build
- * time. The package checks contrast when it is generated: FG on every Tint is
- * at least 7:1, each base hue is at least 4.5:1 on BG, Surface, SelectionBG and
- * every Tint, and each Soft hue is at least 4.5:1 on BG, Surface and every
- * Wash. The remapper and stylesheet rely on those guarantees when they pick a tier.
+ * A dark theme built from `palette`, with its tiers derived by gg-theme's own
+ * code, so a custom palette gets the same tints and soft colours gg-theme
+ * would publish for it. Throws when a tier cannot be made readable; check a
+ * palette with `paletteProblems` before saving it.
  */
-export const theme: Theme = {
-  bg: parseHex(palette.bg),
-  wash: parseHex(tiers.wash),
-  surface: parseHex(palette.surface),
-  overlay: parseHex(palette.overlay),
-  fgDim: parseHex(palette["fg-dim"]),
-  fg: parseHex(palette.fg),
-  selectionBg: parseHex(palette["selection-bg"]),
-  inverseAccent: parseHex(tokens.palette.light.accent),
-  hues: {
-    accent: hueTiers("accent"),
-    red: hueTiers("red"),
-    orange: hueTiers("orange"),
-    yellow: hueTiers("yellow"),
-    green: hueTiers("green"),
-    cyan: hueTiers("cyan"),
-    blue: hueTiers("blue"),
-    magenta: hueTiers("magenta"),
-  },
+export const createTheme = (palette: Palette): Theme => {
+  const tiers = deriveTiers("dark", palette);
+
+  const hueTiers = (hue: HueName): HueTiers => ({
+    base: parseHex(palette[hue]),
+    soft: tier(tiers, `soft-${hue}`),
+    quiet: tier(tiers, `quiet-${hue}`),
+    wash: tier(tiers, `wash-${hue}`),
+    tint: tier(tiers, `tint-${hue}`),
+  });
+
+  return {
+    bg: parseHex(palette.bg),
+    wash: tier(tiers, "wash"),
+    surface: parseHex(palette.surface),
+    overlay: parseHex(palette.overlay),
+    fgDim: parseHex(palette["fg-dim"]),
+    fg: parseHex(palette.fg),
+    selectionBg: parseHex(palette["selection-bg"]),
+    hues: {
+      accent: hueTiers("accent"),
+      red: hueTiers("red"),
+      green: hueTiers("green"),
+      yellow: hueTiers("yellow"),
+      blue: hueTiers("blue"),
+      magenta: hueTiers("magenta"),
+      cyan: hueTiers("cyan"),
+      orange: hueTiers("orange"),
+    },
+  };
 };
+
+/** The gg dark theme the extension ships with. */
+export const defaultTheme: Theme = createTheme(defaultPalette);

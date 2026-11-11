@@ -1,3 +1,4 @@
+import { hueNames } from "@gjermundgaraba/gg-theme/derive";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -10,7 +11,7 @@ import type { Rgba } from "../src/color/color.ts";
 import { knownCanvasColors } from "../src/docs/docs.ts";
 import { createRemapper } from "../src/remap/remap.ts";
 import type { Role } from "../src/remap/remap.ts";
-import { hueNames, theme } from "../src/theme/theme.ts";
+import { defaultTheme as theme } from "../src/theme/theme.ts";
 import { chromatic, greys } from "./fixtures/google-palette.ts";
 import { observedCanvasColors } from "./fixtures/observed-canvas-colors.ts";
 

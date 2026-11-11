@@ -10,7 +10,7 @@ Google Docs changes without notice. The extension depends on a few facts about h
 
 ## 1. Reproduce
 
-1. Run `pnpm install`, then `pnpm run verify`. It builds `dist/`, opens a document in Playwright's Chromium with the extension and diagnostics on, and prints six PASS/FAIL checks. It writes `report.json`, `page.png` and `selection.png` to `.cache/verify/`. Look at both screenshots.
+1. Run `pnpm install`, then `pnpm run verify`. It builds `dist/`, opens a document in Playwright's Chromium with the extension and diagnostics on, and prints seven PASS/FAIL checks. It writes `report.json`, `page.png` and `selection.png` to `.cache/verify/`. Look at both screenshots.
 2. `verify` opens the reference document when `scripts/reference-doc.ts` has its URL, and the public document otherwise. Pass `--url <document>` to open the document the user reported, and `--headed` to watch.
 3. The reference document is private, so it needs a signed-in profile. If `verify` lands on a Google sign-in page, ask the user to run `! pnpm run sign-in`, sign in, and quit Chromium. Google may refuse sign-in in this browser. If it does, say so and continue on the public document, and state which features that leaves unverified: the editing toolbar, comments, suggestions, and spelling marks.
 4. Run `pnpm run inspect` (it takes the same flags). It lists Google tokens that appeared or disappeared, interface elements still light, and every canvas, in `.cache/inspect/inspect.json`.
@@ -27,6 +27,7 @@ If every check passes and the screenshots look right, ask the user what they see
 | `every colour recognised` fails | Canvas reports a colour syntax `parseCanvasColor` cannot read | `src/color/color.ts`, with a test in `tests/color.test.ts` |
 | `Docs draws a light page` fails: the commonest opaque paper is dark | Docs now draws dark itself, perhaps when it sees `docsDarkMode` | Stop and report to the user (see below) |
 | `dark-mode class kept on <html>` fails | Docs rewrites `<html>`'s class | `src/page/main.ts`; keep the class without fighting Docs in a loop |
+| `saved palette applied before the first draw` fails | `palette` is `waiting`: the bridge did not run or the attribute was lost. `drawsBeforePalette` > 0: Docs now draws before the bridge runs | `src/page/palette-handoff.ts` and `src/background/registration.ts`; a fact about Docs goes in `docs.ts` |
 | `blank page is BG` fails while the hook works | The page fill is a new colour, or Docs fills the page another way | `report.json` → `colors`; usually a `knownCanvasColors` entry |
 | A colour has the wrong meaning, such as the selection showing a hue instead of SelectionBG | Docs changed the colour of a fixed-meaning element | `knownCanvasColors` in `src/docs/docs.ts` |
 | Toolbar, menu or dialog areas are light | Google added or renamed colour tokens, or an element sets its colour outside the tokens | `inspect` → new tokens: add them to `googleDarkModeTokens` and map them in `src/ui/docs-css.ts`. A light element with no token behind it: add its selector to `docs.ts` and a rule to `renderDocsCss` |
@@ -51,7 +52,8 @@ Stop and report to the user, with options, instead of patching around it, when:
 
 1. Run `pnpm run ready` (format, lint, type check, tests, build). Fix the code instead of adding lint exceptions.
 2. Run `pnpm run verify` on the reference document and on the public one (`--url` with `publicDocUrl`). Every check must pass, and the screenshots must look right.
-3. Tell the user to reload the extension at `chrome://extensions` and reload their Docs tabs.
+3. Run `pnpm run verify-options`, which checks a custom palette reaches the document.
+4. Tell the user to reload the extension at `chrome://extensions` and reload their Docs tabs.
 
 Report the cause, the files changed, what verify showed on each document, and anything left unverified. Do not commit unless asked.
 

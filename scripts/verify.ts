@@ -6,42 +6,22 @@ import type { Page } from "playwright";
 import { toHex } from "../src/color/color.ts";
 import { pageCanvasClass } from "../src/docs/docs.ts";
 import type { DiagnosticsReport } from "../src/page/diagnostics.ts";
-import { theme } from "../src/theme/theme.ts";
+import { createTheme } from "../src/theme/theme.ts";
+import type { Theme } from "../src/theme/theme.ts";
 import {
   launchWithExtension,
   openWithDiagnostics,
   outputDir,
   parseDocumentArgs,
+  readPageMarginPixel,
   readReport,
+  readSavedPalette,
 } from "./browser.ts";
-
-interface Check {
-  readonly name: string;
-  readonly ok: boolean;
-  readonly detail: string;
-}
+import { printChecks } from "./checks.ts";
+import type { Check } from "./checks.ts";
 
 const { url, headed } = parseDocumentArgs();
 const outDir = outputDir("verify");
-
-const readFirstPageMarginPixel = async (page: Page): Promise<string> =>
-  await page.evaluate((canvasClass) => {
-    const canvas = document.querySelector(`canvas.${canvasClass}`);
-
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      return "no page canvas";
-    }
-
-    try {
-      const pixel = canvas.getContext("2d")?.getImageData(24, 24, 1, 1).data;
-      const [r = 0, g = 0, b = 0, a = 0] = pixel ?? [];
-      const hex = `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
-
-      return a === 255 ? hex : `${hex} at alpha ${a}`;
-    } catch (error) {
-      return `unreadable (${String(error)})`;
-    }
-  }, pageCanvasClass);
 
 const dragSelectOnFirstPage = async (page: Page): Promise<void> => {
   const box = await page
@@ -60,7 +40,11 @@ const dragSelectOnFirstPage = async (page: Page): Promise<void> => {
   await page.waitForTimeout(1000);
 };
 
-const evaluate = (report: DiagnosticsReport, pixel: string): Check[] => {
+const evaluate = (
+  report: DiagnosticsReport,
+  pixel: string,
+  theme: Theme
+): Check[] => {
   const recoloured = Object.values(report.recolouredDraws).reduce(
     (sum, count) => sum + count,
     0
@@ -100,6 +84,11 @@ const evaluate = (report: DiagnosticsReport, pixel: string): Check[] => {
       detail: String(report.darkModeClassPresent),
     },
     {
+      name: "saved palette applied before the first draw",
+      ok: report.palette === "applied" && report.drawsBeforePalette === 0,
+      detail: `palette ${report.palette}; ${report.drawsBeforePalette} draws before it`,
+    },
+    {
       name: "blank page is BG",
       ok: pixel === toHex(theme.bg),
       detail: `pixel ${pixel}, expected ${toHex(theme.bg)}`,
@@ -109,12 +98,13 @@ const evaluate = (report: DiagnosticsReport, pixel: string): Check[] => {
 
 await mkdir(outDir, { recursive: true });
 
-const context = await launchWithExtension(headed);
+const { context, optionsPage } = await launchWithExtension(headed);
 
 try {
+  const theme = createTheme(await readSavedPalette(optionsPage));
   const page = await openWithDiagnostics(context, url);
   await page.screenshot({ path: path.join(outDir, "page.png") });
-  const pixel = await readFirstPageMarginPixel(page);
+  const pixel = await readPageMarginPixel(page);
   await dragSelectOnFirstPage(page);
   await page.screenshot({ path: path.join(outDir, "selection.png") });
   const report = await readReport(page);
@@ -128,19 +118,10 @@ try {
     `${JSON.stringify({ url, pixel, report }, null, 2)}\n`
   );
 
-  const checks = evaluate(report, pixel);
+  const checks = evaluate(report, pixel, theme);
 
-  for (const check of checks) {
-    console.log(
-      `${check.ok ? "PASS" : "FAIL"}  ${check.name}: ${check.detail}`
-    );
-  }
-
+  printChecks(checks);
   console.log(`\nreport and screenshots in ${outDir}`);
-
-  if (checks.some(({ ok }) => !ok)) {
-    process.exitCode = 1;
-  }
 } finally {
   await context.close();
 }
