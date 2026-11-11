@@ -1,0 +1,37 @@
+{
+  "name": "gdocs-dark-mode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that themes Google Docs with the gg dark palette.",
+  "type": "module",
+  "scripts": {
+    "build": "vpx ./scripts/build.ts",
+    "verify": "vpx ./scripts/build.ts && vpx ./scripts/verify.ts",
+    "sign-in": "vpx ./scripts/sign-in.ts",
+    "ready": "vp check && vp test && vp run build",
+    "prepare": "vp config && effect-tsgo patch --no-typescript --oxlint",
+    "inspect": "vpx ./scripts/build.ts && vpx ./scripts/inspect.ts"
+  },
+  "devDependencies": {
+    "@clanker-stuff/oxlint-config": "catalog:",
+    "@effect/tsgo": "catalog:",
+    "@gjermundgaraba/gg-theme": "catalog:",
+    "@types/chrome": "catalog:",
+    "@types/node": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:",
+    "ultracite": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.18.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=26.13.0"
+  }
+}
