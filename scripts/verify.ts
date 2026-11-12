@@ -3,11 +3,9 @@ import path from "node:path";
 
 import type { Page } from "playwright";
 
-import { toHex } from "../src/color/color.ts";
 import { pageCanvasClass } from "../src/docs/docs.ts";
 import type { DiagnosticsReport } from "../src/page/diagnostics.ts";
-import { createTheme } from "../src/theme/theme.ts";
-import type { Theme } from "../src/theme/theme.ts";
+import { defaultTheme as theme } from "../src/theme/theme.ts";
 import {
   launchWithExtension,
   openWithDiagnostics,
@@ -15,7 +13,6 @@ import {
   parseDocumentArgs,
   readPageMarginPixel,
   readReport,
-  readSavedPalette,
 } from "./browser.ts";
 import { printChecks } from "./checks.ts";
 import type { Check } from "./checks.ts";
@@ -40,11 +37,7 @@ const dragSelectOnFirstPage = async (page: Page): Promise<void> => {
   await page.waitForTimeout(1000);
 };
 
-const evaluate = (
-  report: DiagnosticsReport,
-  pixel: string,
-  theme: Theme
-): Check[] => {
+const evaluate = (report: DiagnosticsReport, pixel: string): Check[] => {
   const recoloured = Object.values(report.recolouredDraws).reduce(
     (sum, count) => sum + count,
     0
@@ -84,24 +77,21 @@ const evaluate = (
       detail: String(report.darkModeClassPresent),
     },
     {
-      name: "saved palette applied before the first draw",
-      ok: report.palette === "applied" && report.drawsBeforePalette === 0,
-      detail: `palette ${report.palette}; ${report.drawsBeforePalette} draws before it`,
-    },
-    {
       name: "blank page is BG",
-      ok: pixel === toHex(theme.bg),
-      detail: `pixel ${pixel}, expected ${toHex(theme.bg)}`,
+      ok: pixel === theme.bg,
+      detail: `pixel ${pixel}, expected ${theme.bg}`,
     },
   ];
 };
 
 await mkdir(outDir, { recursive: true });
 
-const { context, optionsPage } = await launchWithExtension(headed);
+const { context } = await launchWithExtension(
+  headed,
+  path.join(outDir, "profile")
+);
 
 try {
-  const theme = createTheme(await readSavedPalette(optionsPage));
   const page = await openWithDiagnostics(context, url);
   await page.screenshot({ path: path.join(outDir, "page.png") });
   const pixel = await readPageMarginPixel(page);
@@ -118,7 +108,7 @@ try {
     `${JSON.stringify({ url, pixel, report }, null, 2)}\n`
   );
 
-  const checks = evaluate(report, pixel, theme);
+  const checks = evaluate(report, pixel);
 
   printChecks(checks);
   console.log(`\nreport and screenshots in ${outDir}`);

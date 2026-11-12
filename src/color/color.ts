@@ -19,13 +19,17 @@ interface Oklab {
   readonly b: number;
 }
 
-const hexPattern = /^#(?<hex>[\da-f]{6})$/iu;
+const hexPattern = /^#[\da-f]{6}$/iu;
 
 const rgbaPattern =
-  /^rgba?\(\s*(?<r>\d{1,3})\s*,\s*(?<g>\d{1,3})\s*,\s*(?<b>\d{1,3})\s*(?:,\s*(?<a>\d*\.?\d+)\s*)?\)$/iu;
+  /^rgba\(\s*(?<r>\d{1,3})\s*,\s*(?<g>\d{1,3})\s*,\s*(?<b>\d{1,3})\s*,\s*(?<a>\d*\.?\d+)\s*\)$/iu;
 
 const byte = (value: number): number =>
   Math.round(Math.min(255, Math.max(0, value)));
+
+/** Whether `value` is a `#rrggbb` colour, in either case. */
+export const isHexColor = (value: unknown): value is string =>
+  typeof value === "string" && hexPattern.test(value);
 
 export const rgb = (r: number, g: number, b: number, a = 1): Rgba => ({
   r,
@@ -41,10 +45,8 @@ export const rgb = (r: number, g: number, b: number, a = 1): Rgba => ({
  * so anything else is `undefined`.
  */
 export const parseCanvasColor = (css: string): Rgba | undefined => {
-  const hex = hexPattern.exec(css)?.groups?.["hex"];
-
-  if (hex !== undefined) {
-    const value = Number.parseInt(hex, 16);
+  if (hexPattern.test(css)) {
+    const value = Number.parseInt(css.slice(1), 16);
 
     return rgb((value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
   }
@@ -56,7 +58,7 @@ export const parseCanvasColor = (css: string): Rgba | undefined => {
   }
 
   const channels = [groups["r"], groups["g"], groups["b"]].map(Number);
-  const alpha = groups["a"] === undefined ? 1 : Number(groups["a"]);
+  const alpha = Number(groups["a"]);
 
   if (channels.some((channel) => channel > 255) || alpha > 1) {
     return undefined;

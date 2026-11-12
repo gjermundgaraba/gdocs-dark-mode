@@ -1,67 +1,97 @@
+import { refreshMessage } from "../extension/messages.ts";
+import { userScriptsAllowed } from "../extension/user-scripts.ts";
 import {
-  paletteKey,
   readEnabled,
   readPalette,
   writeEnabled,
 } from "../settings/settings.ts";
-import { createTheme, defaultTheme } from "../theme/theme.ts";
-import type { Theme } from "../theme/theme.ts";
 import { showState } from "./icon.ts";
-import { reloadDocuments, syncRegistration } from "./registration.ts";
+import type { ExtensionState } from "./icon.ts";
+import { reloadDocuments, syncPageScript } from "./registration.ts";
 
-const savedTheme = async (): Promise<Theme> => {
-  const palette = await readPalette();
+interface Update {
+  readonly state: ExtensionState;
+  readonly registrationChanged: boolean;
+}
 
-  try {
-    return createTheme(palette);
-  } catch {
-    return defaultTheme;
+const update = async (): Promise<Update> => {
+  if (!(await userScriptsAllowed())) {
+    return { state: "blocked", registrationChanged: false };
   }
-};
 
-const showCurrentState = async (): Promise<void> => {
-  await showState(await savedTheme(), await readEnabled());
-};
+  const enabled = await readEnabled();
 
-const toggle = async (): Promise<void> => {
-  const enabled = !(await readEnabled());
-  await writeEnabled(enabled);
-  await syncRegistration(enabled);
-  await showCurrentState();
-  await reloadDocuments();
-};
+  const registrationChanged = await syncPageScript(
+    enabled ? await readPalette() : undefined
+  );
 
-const reregisterAfterInstallOrUpdate = async (): Promise<void> => {
-  await syncRegistration(await readEnabled());
-  await showCurrentState();
-};
-
-const applySavedPalette = async (): Promise<void> => {
-  await showCurrentState();
-
-  if (await readEnabled()) {
+  if (registrationChanged) {
     await reloadDocuments();
   }
+
+  return { state: enabled ? "on" : "off", registrationChanged };
 };
+
+const oneAtATime = <T>(task: () => Promise<T>): (() => Promise<T>) => {
+  let previous: Promise<unknown> = Promise.resolve();
+
+  return async () => {
+    const current = previous.then(task);
+    previous = current.catch(() => undefined);
+
+    return await current;
+  };
+};
+
+const refresh = oneAtATime(async (): Promise<boolean> => {
+  const { state, registrationChanged } = await update();
+  await showState(state);
+
+  return registrationChanged;
+});
 
 const report = (error: unknown): void => {
   console.error("gdocs-dark-mode:", error);
 };
 
-chrome.runtime.onInstalled.addListener(() => {
-  reregisterAfterInstallOrUpdate().catch(report);
-});
+const toggleOnceInSync = async (): Promise<void> => {
+  if (!(await refresh())) {
+    await writeEnabled(!(await readEnabled()));
+  }
+};
+
+const toggle = async (): Promise<void> => {
+  await ((await userScriptsAllowed())
+    ? toggleOnceInSync()
+    : chrome.runtime.openOptionsPage());
+};
+
+const openSetupIfBlocked = async (): Promise<void> => {
+  if (!(await userScriptsAllowed())) {
+    await chrome.runtime.openOptionsPage();
+  }
+};
+
+refresh().catch(report);
 
 chrome.runtime.onStartup.addListener(() => {
-  showCurrentState().catch(report);
+  refresh().catch(report);
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  openSetupIfBlocked().catch(report);
 });
 
 chrome.action.onClicked.addListener(() => {
   toggle().catch(report);
 });
 
-chrome.storage.local.onChanged.addListener((changes) => {
-  if (paletteKey in changes) {
-    applySavedPalette().catch(report);
+chrome.storage.local.onChanged.addListener(() => {
+  refresh().catch(report);
+});
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message === refreshMessage) {
+    refresh().catch(report);
   }
 });

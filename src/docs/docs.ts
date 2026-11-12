@@ -43,6 +43,21 @@ export const knownCanvasColors: readonly KnownCanvasColor[] = [
   { css: "rgba(78, 143, 248, 0.5)", meaning: "selection" },
 ];
 
+/** The hues of Google's extended colour tokens, `--ws-sys-color-extended-<hue>-*`. */
+export const googleExtendedHues = [
+  "blue",
+  "cyan",
+  "green",
+  "grey",
+  "orange",
+  "pink",
+  "purple",
+  "red",
+  "yellow",
+] as const;
+
+export type GoogleExtendedHue = (typeof googleExtendedHues)[number];
+
 /**
  * The colour custom properties Google's `.docsDarkMode` rule sets, as listed
  * from a live document by `pnpm run inspect` (without the `-rgb` twins, which
@@ -100,17 +115,7 @@ export const googleDarkModeTokens = [
   "--gm3-sys-color-tertiary-container",
   "--gm3-sys-color-tertiary-fixed",
   "--gm3-sys-color-tertiary-fixed-dim",
-  ...[
-    "blue",
-    "cyan",
-    "green",
-    "grey",
-    "orange",
-    "pink",
-    "purple",
-    "red",
-    "yellow",
-  ].flatMap((hue) => [
+  ...googleExtendedHues.flatMap((hue) => [
     `--ws-sys-color-extended-${hue}-fill`,
     `--ws-sys-color-extended-${hue}-outline`,
     `--ws-sys-color-extended-${hue}-tonal`,

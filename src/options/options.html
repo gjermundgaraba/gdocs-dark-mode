@@ -126,6 +126,17 @@
       #warnings {
         color: var(--warning);
       }
+
+      #setup {
+        padding: 0.25rem 1rem 1rem;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: var(--accent-tint);
+      }
+
+      #setup p {
+        color: var(--fg);
+      }
     </style>
   </head>
   <body>
@@ -135,6 +146,16 @@
       <code>tokens.json</code>. The washes, tints and soft colours are derived
       from these the way gg-theme derives them. Saving reloads open documents.
     </p>
+
+    <section id="setup" hidden>
+      <h2>Allow user scripts</h2>
+      <p>
+        The extension themes Docs with a script that runs in the page, which
+        Chrome runs only once you turn on <strong>Allow User Scripts</strong>
+        on the extension's details page. This notice goes away once it is on.
+      </p>
+      <button type="button" id="open-details">Open the details page</button>
+    </section>
 
     <h2>Base</h2>
     <div class="colours" id="base"></div>
@@ -162,6 +183,6 @@
     <ul id="errors"></ul>
     <ul id="warnings"></ul>
 
-    <script src="options.js"></script>
+    <script type="module" src="./options.ts"></script>
   </body>
 </html>

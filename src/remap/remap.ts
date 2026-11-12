@@ -6,6 +6,7 @@ import {
   hueDistance,
   mix,
   parseCanvasColor,
+  parseHex,
   rgb,
   toCss,
   toOklch,
@@ -35,26 +36,53 @@ const greyMaxChroma = 0.02;
 const white = rgb(255, 255, 255);
 const black = rgb(0, 0, 0);
 
-const nearestHue = (theme: Theme, color: Rgba): HueName => {
+interface HueInks {
+  readonly oklchHueAngle: number;
+  readonly soft: Rgba;
+  readonly tint: Rgba;
+}
+
+interface Inks {
+  readonly bg: Rgba;
+  readonly fg: Rgba;
+  readonly selectionBg: Rgba;
+  readonly hues: readonly [HueInks, ...HueInks[]];
+}
+
+const inksOf = (theme: Theme): Inks => {
+  const hueInks = (hue: HueName): HueInks => ({
+    oklchHueAngle: toOklch(parseHex(theme[hue])).h,
+    soft: parseHex(theme[`soft-${hue}`]),
+    tint: parseHex(theme[`tint-${hue}`]),
+  });
+
+  const [first, ...rest] = hueNames;
+
+  return {
+    bg: parseHex(theme.bg),
+    fg: parseHex(theme.fg),
+    selectionBg: parseHex(theme["selection-bg"]),
+    hues: [hueInks(first), ...rest.map(hueInks)],
+  };
+};
+
+const nearestHue = (inks: Inks, color: Rgba): HueInks => {
   const { h } = toOklch(color);
-  let best: HueName = "accent";
-  let bestDistance = Number.POSITIVE_INFINITY;
+  const distance = (hue: HueInks): number => hueDistance(h, hue.oklchHueAngle);
+  let [best] = inks.hues;
 
-  for (const hue of hueNames) {
-    const distance = hueDistance(h, toOklch(theme.hues[hue].base).h);
-
-    if (distance < bestDistance) {
+  for (const hue of inks.hues) {
+    if (distance(hue) < distance(best)) {
       best = hue;
-      bestDistance = distance;
     }
   }
 
   return best;
 };
 
-const greyWithContrastAgainstBg = (theme: Theme, ratio: number): Rgba => {
-  if (ratio >= contrast(theme.fg, theme.bg)) {
-    return theme.fg;
+const greyWithContrastAgainstBg = (inks: Inks, ratio: number): Rgba => {
+  if (ratio >= contrast(inks.fg, inks.bg)) {
+    return inks.fg;
   }
 
   let [low, high] = [0, 1];
@@ -62,40 +90,38 @@ const greyWithContrastAgainstBg = (theme: Theme, ratio: number): Rgba => {
   for (let step = 0; step < 24; step += 1) {
     const middle = (low + high) / 2;
 
-    if (contrast(mix(theme.bg, theme.fg, middle), theme.bg) < ratio) {
+    if (contrast(mix(inks.bg, inks.fg, middle), inks.bg) < ratio) {
       low = middle;
     } else {
       high = middle;
     }
   }
 
-  return mix(theme.bg, theme.fg, high);
+  return mix(inks.bg, inks.fg, high);
 };
 
-const mapColor = (theme: Theme, color: Rgba, role: Role): Rgba => {
+const mapColor = (inks: Inks, color: Rgba, role: Role): Rgba => {
   if (toOklch(color).c < greyMaxChroma) {
-    return greyWithContrastAgainstBg(theme, contrast(color, white));
+    return greyWithContrastAgainstBg(inks, contrast(color, white));
   }
 
-  const tiers = theme.hues[nearestHue(theme, color)];
+  const hue = nearestHue(inks, color);
 
   if (role === "ink") {
-    return tiers.soft;
+    return hue.soft;
   }
 
-  return contrast(color, black) >= contrast(color, white)
-    ? tiers.tint
-    : tiers.soft;
+  return contrast(color, black) >= contrast(color, white) ? hue.tint : hue.soft;
 };
 
 const mapMeaning = (
-  theme: Theme,
+  inks: Inks,
   meaning: CanvasColorMeaning,
   color: Rgba
 ): Rgba => {
   switch (meaning) {
     case "selection": {
-      return translucentOver(theme.selectionBg, theme.bg, color.a);
+      return translucentOver(inks.selectionBg, inks.bg, color.a);
     }
   }
 };
@@ -125,6 +151,8 @@ export const createRemapper = (
   theme: Theme,
   knownColors: readonly KnownCanvasColor[]
 ): Remapper => {
+  const inks = inksOf(theme);
+
   const meanings = new Map(
     knownColors.map(({ css, meaning }) => [css, meaning])
   );
@@ -144,10 +172,10 @@ export const createRemapper = (
     const meaning = meanings.get(css);
 
     if (meaning !== undefined) {
-      return toCss(mapMeaning(theme, meaning, color));
+      return toCss(mapMeaning(inks, meaning, color));
     }
 
-    return toCss(withAlpha(mapColor(theme, color, role), color.a));
+    return toCss(withAlpha(mapColor(inks, color, role), color.a));
   };
 
   return {

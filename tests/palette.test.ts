@@ -1,8 +1,6 @@
-import { hueNames } from "@gjermundgaraba/gg-theme/derive";
 import tokens from "@gjermundgaraba/gg-theme/tokens" with { type: "json" };
 import { describe, expect, it } from "vite-plus/test";
 
-import { toHex } from "../src/color/color.ts";
 import {
   defaultPalette,
   paletteFromTokensFile,
@@ -73,23 +71,16 @@ describe("paletteFromTokensFile", () => {
 
 describe("createTheme", () => {
   it("derives the tiers gg-theme publishes for its own palette", () => {
-    const published = tokens.tiers.dark;
-
-    expect(toHex(defaultTheme.wash)).toBe(published.wash);
-
-    for (const hue of hueNames) {
-      const tiers = defaultTheme.hues[hue];
-      expect(toHex(tiers.soft), hue).toBe(published[`soft-${hue}`]);
-      expect(toHex(tiers.quiet), hue).toBe(published[`quiet-${hue}`]);
-      expect(toHex(tiers.wash), hue).toBe(published[`wash-${hue}`]);
-      expect(toHex(tiers.tint), hue).toBe(published[`tint-${hue}`]);
-    }
+    expect(defaultTheme).toStrictEqual({
+      ...defaultPalette,
+      ...tokens.tiers.dark,
+    });
   });
 
   it("follows a custom background", () => {
     const theme = createTheme({ ...defaultPalette, bg: "#101010" });
 
-    expect(toHex(theme.bg)).toBe("#101010");
-    expect(toHex(theme.wash)).not.toBe(toHex(defaultTheme.wash));
+    expect(theme.bg).toBe("#101010");
+    expect(theme.wash).not.toBe(defaultTheme.wash);
   });
 });

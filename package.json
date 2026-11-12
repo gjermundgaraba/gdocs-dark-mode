@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vpx ./scripts/build.ts",
     "verify": "vpx ./scripts/build.ts && vpx ./scripts/verify.ts",
-    "sign-in": "vpx ./scripts/sign-in.ts",
+    "render-icons": "vpx ./scripts/render-icons.ts",
     "ready": "vp check && vp test && vp run build",
     "prepare": "vp config && effect-tsgo patch --no-typescript --oxlint",
     "inspect": "vpx ./scripts/build.ts && vpx ./scripts/inspect.ts",

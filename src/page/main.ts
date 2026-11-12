@@ -4,60 +4,31 @@ import {
   pageCanvasClass,
 } from "../docs/docs.ts";
 import { createRemapper } from "../remap/remap.ts";
-import type { Palette } from "../theme/palette.ts";
-import { createTheme, defaultTheme } from "../theme/theme.ts";
-import type { Theme } from "../theme/theme.ts";
+import { defaultPalette } from "../theme/palette.ts";
+import { createTheme } from "../theme/theme.ts";
 import { renderDocsCss } from "../ui/docs-css.ts";
 import { installCanvasHook } from "./canvas-hook.ts";
 import { createDiagnostics, debugEnabled } from "./diagnostics.ts";
-import { takePalette } from "./palette-handoff.ts";
+import { takePalette } from "./palette-global.ts";
 
 const diagnostics = debugEnabled()
   ? createDiagnostics(darkModeClass)
   : undefined;
 
+const theme = createTheme(takePalette() ?? defaultPalette);
+
 const stylesheet = document.createElement("style");
 
-stylesheet.textContent = renderDocsCss(defaultTheme);
+stylesheet.textContent = renderDocsCss(theme);
 
 document.documentElement.append(stylesheet);
 
 document.documentElement.classList.add(darkModeClass);
 
-let remapper = createRemapper(defaultTheme, knownCanvasColors);
-
 installCanvasHook({
-  remapper: { remap: (css, role) => remapper.remap(css, role) },
+  remapper: createRemapper(theme, knownCanvasColors),
   appliesTo: (canvas) => canvas.classList.contains(pageCanvasClass),
   observer: diagnostics,
-});
-
-const themeFrom = (palette: Palette): Theme | undefined => {
-  try {
-    return createTheme(palette);
-  } catch {
-    return undefined;
-  }
-};
-
-takePalette((palette) => {
-  if (palette === undefined) {
-    diagnostics?.notePalette("malformed");
-
-    return;
-  }
-
-  const theme = themeFrom(palette);
-
-  if (theme === undefined) {
-    diagnostics?.notePalette("underivable");
-
-    return;
-  }
-
-  remapper = createRemapper(theme, knownCanvasColors);
-  stylesheet.textContent = renderDocsCss(theme);
-  diagnostics?.notePalette("applied");
 });
 
 if (diagnostics !== undefined) {

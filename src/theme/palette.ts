@@ -1,6 +1,8 @@
 import { hueNames } from "@gjermundgaraba/gg-theme/derive";
 import tokens from "@gjermundgaraba/gg-theme/tokens" with { type: "json" };
 
+import { isHexColor } from "../color/color.ts";
+
 /**
  * The colours a user can set, under gg-theme's `tokens.json` names. Everything
  * else the extension paints with is derived from them.
@@ -20,13 +22,8 @@ export type PaletteKey = (typeof paletteKeys)[number];
 /** `#rrggbb` colours, lower-case, under `paletteKeys`. */
 export type Palette = Readonly<Record<PaletteKey, string>>;
 
-const hexColor = /^#[\da-f]{6}$/iu;
-
 const isObject = (value: unknown): value is object =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-
-const isHexColor = (value: unknown): value is string =>
-  typeof value === "string" && hexColor.test(value);
 
 const field = (value: unknown, name: string): unknown =>
   isObject(value) && Object.hasOwn(value, name)

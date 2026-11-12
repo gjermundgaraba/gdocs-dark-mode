@@ -1,7 +1,8 @@
 import { hueNames } from "@gjermundgaraba/gg-theme/derive";
 import type { HueName } from "@gjermundgaraba/gg-theme/derive";
 
-import { toHex } from "../color/color.ts";
+import { refreshMessage } from "../extension/messages.ts";
+import { userScriptsAllowed } from "../extension/user-scripts.ts";
 import {
   readPalette,
   resetPalette,
@@ -86,10 +87,10 @@ const showSample = (field: ColourField, theme: Theme, key: PaletteKey) => {
     return;
   }
 
-  const { soft, tint } = theme.hues[key];
-  field.sample.textContent = `Aa ${toHex(soft)} on ${toHex(tint)}`;
-  field.sample.style.color = toHex(soft);
-  field.sample.style.background = toHex(tint);
+  const [soft, tint] = [theme[`soft-${key}`], theme[`tint-${key}`]];
+  field.sample.textContent = `Aa ${soft} on ${tint}`;
+  field.sample.style.color = soft;
+  field.sample.style.background = tint;
 };
 
 const start = async (): Promise<void> => {
@@ -220,6 +221,33 @@ const start = async (): Promise<void> => {
   render();
 };
 
-start().catch((error: unknown) => {
+const report = (error: unknown): void => {
   console.error("gdocs-dark-mode options:", error);
+};
+
+const blockedRecheckMs = 1000;
+
+const showSetupUntilAllowed = async (): Promise<void> => {
+  const allowed = await userScriptsAllowed();
+  required("#setup", HTMLElement).hidden = allowed;
+
+  if (allowed) {
+    await chrome.runtime.sendMessage(refreshMessage);
+
+    return;
+  }
+
+  setTimeout(() => {
+    showSetupUntilAllowed().catch(report);
+  }, blockedRecheckMs);
+};
+
+required("#open-details", HTMLButtonElement).addEventListener("click", () => {
+  chrome.tabs
+    .create({ url: `chrome://extensions/?id=${chrome.runtime.id}` })
+    .catch(report);
 });
+
+showSetupUntilAllowed().catch(report);
+
+start().catch(report);

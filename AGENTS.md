@@ -8,25 +8,28 @@ The toolchain is Vite+ (`vp`) with pnpm. `vp check` formats, lints and type-chec
 
 - `pnpm run ready`: check, test and build. Run it before handing work back.
 - `pnpm run build`: build the unpacked extension into `dist/`.
-- `pnpm run verify [--url <doc>] [--headed]`: build, load `dist/` into Playwright's Chromium, open a document with diagnostics on, and run the end-to-end checks. Output goes to `.cache/verify/`.
-- `pnpm run verify-options [--url <doc>] [--headed]`: build, then in a throwaway profile import a `tokens.json` and edit a colour on the options page, save, check a document uses the palette from its first draw, and reset. Output goes to `.cache/verify-options/`.
+- `pnpm run verify [--url <doc>] [--headed]`: build, load `dist/` into Playwright's Chromium, open a document (the public one by default) with diagnostics on, and run the end-to-end checks. Output goes to `.cache/verify/`.
+- `pnpm run verify-options [--url <doc>] [--headed]`: build, then import a `tokens.json` and edit a colour on the options page, save, check a document uses the palette, reset it, check a refresh with nothing changed leaves documents alone, and switch dark mode off. Output goes to `.cache/verify-options/`.
 - `pnpm run inspect [--url <doc>] [--headed]`: list Google's dark-mode tokens against `googleDarkModeTokens`, light interface elements, and canvases. Output goes to `.cache/inspect/`.
-- `pnpm run sign-in`: open the shared profile in plain Chromium for a Google sign-in, so verify can open the private reference document.
+- `pnpm run render-icons`: redraw the toolbar icons in `src/extension/icons/` from the default theme.
+
+Each Playwright script starts from a new profile and turns on "Allow User Scripts" the way a user would. The scripts cannot sign in to Google, so they only open documents anyone with the link can view.
 
 When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakage/SKILL.md`.
 
 # Architecture
 
-- `src/docs/docs.ts` holds every fact about how Docs is built: URL, class names, selectors, fixed-meaning canvas colours, and Google's dark-mode tokens. Nothing else names a Docs internal.
+- `src/docs/docs.ts` holds every fact observed about how Docs is built: URL, class names, selectors, fixed-meaning canvas colours, and the dark-mode tokens Google's stylesheet sets. `src/ui/docs-css.ts` maps those tokens to theme colours; nothing else names a Docs internal.
 - `src/theme/palette.ts` defines the 14 colours a user can set, under gg-theme's `tokens.json` names, parses them from untrusted data and from a `tokens.json`, and takes the default from gg-theme's dark palette at build time. Changing the default means bumping `@gjermundgaraba/gg-theme` in `pnpm-workspace.yaml` and rebuilding.
-- `src/theme/theme.ts` builds a `Theme` from a palette. The tiers (wash, tint, soft, quiet) come from gg-theme's own `deriveTiers` (`@gjermundgaraba/gg-theme/derive`), so a custom palette gets the tiers gg-theme would publish for it. `src/theme/checks.ts` sorts a palette's problems into errors, which block saving, and contrast warnings.
-- `src/settings/settings.ts` owns `chrome.storage.local`: whether dark mode is on, and the saved palette. No saved palette means the default, so saving the default removes it.
+- `src/theme/theme.ts` builds a `Theme`: the palette plus the tiers (wash, tint, soft, quiet) gg-theme's own `deriveTiers` (`@gjermundgaraba/gg-theme/derive`) derives from it, all `#rrggbb` under `tokens.json`'s names, so a custom palette gets the tiers gg-theme would publish for it. `src/theme/checks.ts` reviews a palette: its theme, errors that block saving, and contrast warnings.
+- `src/settings/settings.ts` owns `chrome.storage.local`: whether dark mode is on, and the saved palette. No saved palette means the default, so saving the default removes it. `readPalette` returns the palette documents get: the saved one while it is usable, else the default.
 - `src/color/color.ts` holds the colour maths: canvas colour parsing, OKLab, contrast.
 - `src/remap/remap.ts` is the pure policy that maps a canvas colour and its role (ink or paper) to a theme colour. Its property tests in `tests/remap.test.ts` pin the readability guarantees.
-- `src/page/` runs in the Docs page at document start. `main.ts` runs in the page's own world: it themes with the default palette at once, then swaps in the saved one when it arrives. `canvas-hook.ts` patches the 2D context's draw methods, and `diagnostics.ts` is debug-only bookkeeping. `bridge.ts` runs in the isolated world, which can read extension storage, and hands the saved palette over through `palette-handoff.ts`.
+- `src/page/` runs in the Docs page's own world at document start, as a user script. Its registration puts the palette in code that runs just before `main.ts` (`palette-global.ts`), so the page is themed once, before Docs draws. `canvas-hook.ts` patches the 2D context's draw methods, and `diagnostics.ts` is debug-only bookkeeping.
 - `src/ui/docs-css.ts` renders the interface stylesheet, which overrides Google's Material colour tokens with theme colours. The page script injects it, so it follows the saved palette.
-- `src/options/` is the options page: `editor.ts` is the pure model (draft, saved palette, what to show), `page-style.ts` themes the page from the draft, and `options.ts` wires the DOM. Import reads `palette.dark` from a gg-theme `tokens.json` once; it is a snapshot, not a link to the file.
-- `src/background/` is the service worker. Dark mode is on exactly while the page script and the bridge are registered, so there is no runtime on/off check in the page. Toggling re-registers and reloads open documents; saving a palette redraws the icon and reloads open documents.
+- `src/options/` is the options page: `editor.ts` is the pure model (draft, saved palette, what to show), `page-style.ts` themes the page from the draft, and `options.ts` wires the DOM. Import reads `palette.dark` from a gg-theme `tokens.json` once; it is a snapshot, not a link to the file. Until user scripts are allowed, the page explains how to allow them and rechecks every second; once they are, it asks the worker to refresh.
+- `src/background/` is the service worker. Dark mode is on exactly while the page script is registered with the palette, so the page never asks. One refresh, run one at a time, brings the registration in line with the settings, reloads open documents if it changed, and sets the icon. It runs when the worker starts, on browser startup, on every storage change (the options page only writes settings), and when the options page asks. A toolbar click refreshes first and flips dark mode only if that changed nothing, so the first click after allowing user scripts turns the theme on instead of off.
+- `src/extension/` holds the manifest, the built file names, the static icons (on and off), the user-scripts check, and the message the options page sends.
 - `scripts/` holds the build and the Playwright tooling. Scripts share their browser setup through `scripts/browser.ts`, which drives the extension through its options page, and print results through `scripts/checks.ts`.
 
 # Platform behaviour the code relies on
@@ -35,9 +38,10 @@ When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakag
 - Canvas reports `fillStyle`/`strokeStyle` as `#rrggbb` when opaque and `rgba(r, g, b, a)` otherwise, so the hook reads the normalised value back and the remapper parses only those two shapes.
 - The text selection is a `fillRect` in `rgba(78, 143, 248, 0.5)`, drawn under the text. The caret is a DOM element, `.kix-cursor-caret`, with an inline black border.
 - Docs has an unreleased dark mode: the `docsDarkMode` class switches Google's stylesheet to dark values for its `--gm3-sys-color-*` and `--ws-sys-color-*` tokens and swaps icon sprites. It does not touch the canvas. Light values are `var()` fallbacks, not declarations, so overrides on `html:root` apply everywhere and outrank Google's `.docsDarkMode` rule.
-- Registered content scripts can run in the page's main world (`world: "MAIN"`) at `document_start`, before Docs creates its canvases. Main-world scripts cannot read extension storage, and the two worlds' scripts start in no fixed order, so the bridge leaves the palette in an attribute on `<html>` and the page script takes it whenever it starts. The bridge's storage read is asynchronous, so nothing guarantees the palette arrives before Docs draws; `verify` checks that it did (`drawsBeforePalette` is 0).
-- Chromium keeps persisted dynamic content scripts across restarts and versions. One naming a file a later build removed makes every registration fail at startup, until the extension is reloaded. `launchWithExtension` therefore reloads the extension in a throwaway launch first, as Reload on `chrome://extensions` does.
-- Playwright does not see the service worker that starts after `chrome.runtime.reload()`, and extension pages stay blocked in that session, so the scripts relaunch instead.
+- User scripts (`chrome.userScripts`) can run in the page's main world (`world: "MAIN"`) at `document_start`, before any page script and before Docs creates its canvases, and a registration can put inline code ahead of a file. That is how the page script gets the palette synchronously; main-world scripts cannot read extension storage.
+- From Chrome 138 user scripts run only once the user turns on "Allow User Scripts" on the extension's details page. Until then `chrome.userScripts` is `undefined`; it appears in already open extension pages and the running worker once the switch is on, but nothing tells the extension, hence the options page's polling and refresh request. Headless Chromium fires no `visibilitychange` when switching tabs, so the page polls instead of waiting for one.
+- Chrome clears user scripts when the extension updates, and Playwright's `--load-extension` installs the extension afresh on every launch. Whether they survive a normal browser restart is unverified, so the worker re-syncs whenever it starts.
+- Playwright can turn the toggle on by clicking `#allow-user-scripts` on `chrome://extensions/?id=<extension id>`.
 - Playwright's Chromium loads unpacked extensions with `--load-extension`; branded Chrome no longer does.
 
 # Linting and formatting

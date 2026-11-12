@@ -11,7 +11,7 @@ pnpm install
 pnpm run build
 ```
 
-Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and select `dist/`. Pin the extension so its icon shows.
+Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and select `dist/`. Then open the extension's **Details** and turn on **Allow User Scripts**: the extension themes Docs with a script that runs in the page, which Chrome (138 or later) runs only with that switch on. The options page opens on install to walk you through it. Pin the extension so its icon shows.
 
 Click the icon to switch dark mode on or off; open Docs tabs reload with the change. After rebuilding, reload the extension on `chrome://extensions`.
 
@@ -23,7 +23,7 @@ Only the 14 colours Docs uses can be set; gg-theme's terminal and cursor colours
 
 ## Updating the default palette
 
-The default palette comes from `@gjermundgaraba/gg-theme`. Bump its version in `pnpm-workspace.yaml`, run `pnpm install && pnpm run build`, and reload the extension.
+The default palette comes from `@gjermundgaraba/gg-theme`. Bump its version in `pnpm-workspace.yaml`, run `pnpm install && pnpm run render-icons && pnpm run build`, and reload the extension. The toolbar icon is drawn in the default theme's colours, hence `render-icons`.
 
 ## When Docs breaks it
 

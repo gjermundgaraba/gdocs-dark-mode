@@ -4,9 +4,14 @@ import path from "node:path";
 
 import type { Page } from "playwright";
 
-import { paletteKey } from "../src/settings/settings.ts";
-import { paletteProblems } from "../src/theme/checks.ts";
-import { defaultPalette, samePalette } from "../src/theme/palette.ts";
+import { refreshMessage } from "../src/extension/messages.ts";
+import { enabledKey, paletteKey } from "../src/settings/settings.ts";
+import { reviewPalette } from "../src/theme/checks.ts";
+import {
+  defaultPalette,
+  parsePalette,
+  samePalette,
+} from "../src/theme/palette.ts";
 import type { Palette } from "../src/theme/palette.ts";
 import {
   launchWithExtension,
@@ -14,8 +19,6 @@ import {
   outputDir,
   parseDocumentArgs,
   readPageMarginPixel,
-  readReport,
-  readSavedPalette,
   waitForDocsToDraw,
   waitUntil,
 } from "./browser.ts";
@@ -64,6 +67,43 @@ const saveOptions = async (page: Page): Promise<void> => {
   });
 };
 
+const pageMarker = "verifyOptionsMarker";
+
+const staysPutThroughUnchangedRefresh = async (
+  optionsPage: Page,
+  page: Page
+): Promise<boolean> => {
+  await page.evaluate(
+    (marker) => Reflect.set(globalThis, marker, true),
+    pageMarker
+  );
+  await optionsPage.evaluate(async (message) => {
+    await chrome.runtime.sendMessage(message);
+  }, refreshMessage);
+  await page.waitForTimeout(3000);
+
+  return await page.evaluate(
+    (marker) => Reflect.has(globalThis, marker),
+    pageMarker
+  );
+};
+
+const switchOff = async (optionsPage: Page, page: Page): Promise<string> => {
+  await optionsPage.evaluate(async (key) => {
+    await chrome.storage.local.set({ [key]: false });
+  }, enabledKey);
+
+  let pixel = "";
+
+  await waitUntil("the document to reload unthemed", async () => {
+    pixel = await readPageMarginPixel(page).catch(() => "reloading");
+
+    return pixel === "#ffffff";
+  });
+
+  return pixel;
+};
+
 const storedPalette = async (page: Page): Promise<unknown> =>
   await page.evaluate(async (key) => {
     const items = await chrome.storage.local.get(key);
@@ -77,7 +117,7 @@ await mkdir(outDir, { recursive: true });
 
 await writeImportedTokens();
 
-if (paletteProblems(custom).errors.length > 0) {
+if (reviewPalette(custom).theme === undefined) {
   throw new Error("the custom palette under test is not saveable");
 }
 
@@ -93,11 +133,10 @@ try {
   await optionsPage.getByLabel("bg hex", { exact: true }).fill(editedBg);
   await optionsPage.screenshot({ path: path.join(outDir, "options.png") });
   await saveOptions(optionsPage);
-  const saved = await readSavedPalette(optionsPage);
+  const saved = parsePalette(await storedPalette(optionsPage));
 
   const page = await openWithDiagnostics(context, url);
   const customPixel = await readPageMarginPixel(page);
-  const report = await readReport(page);
   await page.screenshot({ path: path.join(outDir, "custom.png") });
 
   const reloaded = page.waitForEvent("load");
@@ -107,20 +146,20 @@ try {
   await waitForDocsToDraw(page);
   const defaultPixel = await readPageMarginPixel(page);
   const storedAfterReset = await storedPalette(optionsPage);
+  const stayed = await staysPutThroughUnchangedRefresh(optionsPage, page);
+
+  const offPixel = await switchOff(optionsPage, page).catch(String);
 
   const checks: Check[] = [
     {
       name: "import and edit are saved",
-      ok: samePalette(saved, custom),
-      detail: `saved bg ${saved.bg}, accent ${saved.accent}`,
+      ok: saved !== undefined && samePalette(saved, custom),
+      detail: `saved bg ${saved?.bg ?? "none"}, accent ${saved?.accent ?? "none"}`,
     },
     {
-      name: "document uses the saved palette from its first draw",
-      ok:
-        report?.palette === "applied" &&
-        report.drawsBeforePalette === 0 &&
-        customPixel === editedBg,
-      detail: `palette ${report?.palette ?? "no report"}; ${report?.drawsBeforePalette ?? "?"} draws before it; pixel ${customPixel}, expected ${editedBg}`,
+      name: "document uses the saved palette",
+      ok: customPixel === editedBg,
+      detail: `pixel ${customPixel}, expected ${editedBg}`,
     },
     {
       name: "saving the default clears the saved palette",
@@ -131,6 +170,16 @@ try {
       name: "open documents reload with the new palette",
       ok: defaultPixel === defaultPalette.bg,
       detail: `pixel ${defaultPixel}, expected ${defaultPalette.bg}`,
+    },
+    {
+      name: "a refresh with nothing changed leaves documents alone",
+      ok: stayed,
+      detail: stayed ? "not reloaded" : "the document reloaded",
+    },
+    {
+      name: "switching off reloads documents unthemed",
+      ok: offPixel === "#ffffff",
+      detail: `pixel ${offPixel}, expected #ffffff`,
     },
   ];
 

@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
@@ -5,35 +6,22 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import type { BrowserContext, Page } from "playwright";
 
-import { scriptIds } from "../src/background/registration.ts";
+import { scriptId } from "../src/background/registration.ts";
 import { pageCanvasClass } from "../src/docs/docs.ts";
 import { files } from "../src/extension/files.ts";
 import { debugStorageKey } from "../src/page/diagnostics.ts";
 import type { DiagnosticsReport } from "../src/page/diagnostics.ts";
-import { paletteKey } from "../src/settings/settings.ts";
-import { defaultPalette, parsePalette } from "../src/theme/palette.ts";
-import type { Palette } from "../src/theme/palette.ts";
-import { publicDocUrl, referenceDocUrl } from "./reference-doc.ts";
 
 const root = path.join(import.meta.dirname, "..");
 const pollIntervalMs = 250;
 const timeoutMs = 30_000;
-const reloadSettleMs = 2000;
+
+/** A public, view-only document with headings, coloured text, links and a table. */
+export const publicDocUrl =
+  "https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit";
 
 /** The unpacked extension, built by `pnpm run build`. */
 export const extensionDir = path.join(root, "dist");
-
-/** Persistent, so a Google sign-in made with `pnpm run sign-in` carries over to verify. */
-export const profileDir = path.join(root, ".cache", "profile");
-
-/**
- * Playwright starts Chromium with these, which pick the key the profile's
- * cookies are encrypted with; a sign-in made without them cannot be read back.
- */
-export const playwrightProfileKeyArgs = [
-  "--password-store=basic",
-  "--use-mock-keychain",
-];
 
 export interface DocumentArgs {
   readonly url: string;
@@ -41,9 +29,8 @@ export interface DocumentArgs {
 }
 
 /**
- * `--url <document>` (default: the reference document if configured, else the
- * public one) and `--headed` to watch the browser. A leading `--`, which pnpm
- * passes through, is ignored.
+ * `--url <document>` (default: the public document) and `--headed` to watch
+ * the browser. A leading `--`, which pnpm passes through, is ignored.
  */
 export const parseDocumentArgs = (): DocumentArgs => {
   const [first, ...rest] = process.argv.slice(2);
@@ -56,10 +43,7 @@ export const parseDocumentArgs = (): DocumentArgs => {
     },
   });
 
-  return {
-    url: values.url ?? referenceDocUrl ?? publicDocUrl,
-    headed: values.headed,
-  };
+  return { url: values.url ?? publicDocUrl, headed: values.headed };
 };
 
 /** Where scripts write reports and screenshots. */
@@ -89,11 +73,46 @@ export interface LoadedExtension {
   readonly optionsPage: Page;
 }
 
-const launch = async (
+const allowUserScripts = async (
+  context: BrowserContext,
+  extensionId: string
+): Promise<void> => {
+  const details = await context.newPage();
+  await details.goto(`chrome://extensions/?id=${extensionId}`);
+  await details.locator("#allow-user-scripts").click();
+  await details.close();
+};
+
+const waitForRegistration = async (optionsPage: Page): Promise<void> => {
+  await waitUntil("the page script to be registered", async () => {
+    const registered = await optionsPage.evaluate(async () => {
+      try {
+        const scripts = await chrome.userScripts.getScripts();
+
+        return scripts.map(({ id }) => id);
+      } catch {
+        return [];
+      }
+    });
+
+    return registered.join(",") === scriptId;
+  });
+};
+
+/**
+ * Playwright's Chromium with the built extension loaded into a new profile at
+ * `profile`, set up the way a user would: "Allow User Scripts" turned on, then
+ * the options page opened, which has the extension register its page script.
+ * Resolves once it is registered; a document opened earlier would load
+ * unthemed.
+ */
+export const launchWithExtension = async (
   headed: boolean,
   profile: string
-): Promise<BrowserContext> =>
-  await chromium.launchPersistentContext(profile, {
+): Promise<LoadedExtension> => {
+  await rm(profile, { recursive: true, force: true });
+
+  const context = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
     headless: !headed,
     viewport: { width: 1400, height: 1000 },
@@ -103,82 +122,19 @@ const launch = async (
     ],
   });
 
-const reloadExtension = async (profile: string): Promise<string> => {
-  const context = await launch(false, profile);
+  const worker =
+    context.serviceWorkers()[0] ??
+    (await context.waitForEvent("serviceworker"));
 
-  try {
-    const worker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
-
-    const closed = worker.waitForEvent("close");
-
-    await worker
-      .evaluate(() => {
-        chrome.runtime.reload();
-      })
-      .catch(async () => await closed);
-    await closed;
-    await sleep(reloadSettleMs);
-
-    return new URL(worker.url()).host;
-  } finally {
-    await context.close();
-  }
-};
-
-const openOptionsPage = async (
-  context: BrowserContext,
-  extensionId: string
-): Promise<Page> => {
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/${files.optionsPage}`);
-
-  return page;
-};
-
-const waitForRegistration = async (optionsPage: Page): Promise<void> => {
-  const expected = scriptIds.toSorted().join(",");
-
-  await waitUntil("the page scripts to be registered", async () => {
-    const registered = await optionsPage.evaluate(async () => {
-      const scripts = await chrome.scripting.getRegisteredContentScripts();
-
-      return scripts.map(({ id }) => id);
-    });
-
-    return registered.toSorted().join(",") === expected;
-  });
-};
-
-/**
- * Playwright's Chromium with the built extension loaded, once the extension
- * has registered its page scripts; a document opened earlier would load
- * unthemed. It first reloads the extension in a separate launch, as
- * chrome://extensions' Reload would, which clears scripts registered by an
- * earlier build. Uses the shared profile unless given another.
- */
-export const launchWithExtension = async (
-  headed: boolean,
-  profile = profileDir
-): Promise<LoadedExtension> => {
-  const extensionId = await reloadExtension(profile);
-  const context = await launch(headed, profile);
-  const optionsPage = await openOptionsPage(context, extensionId);
+  const extensionId = new URL(worker.url()).host;
+  await allowUserScripts(context, extensionId);
+  const optionsPage = await context.newPage();
+  await optionsPage.goto(
+    `chrome-extension://${extensionId}/${files.optionsPage}`
+  );
   await waitForRegistration(optionsPage);
 
   return { context, optionsPage };
-};
-
-/** The palette the extension has saved in this profile, as the page receives it. */
-export const readSavedPalette = async (optionsPage: Page): Promise<Palette> => {
-  const stored = await optionsPage.evaluate(async (key) => {
-    const items = await chrome.storage.local.get(key);
-
-    return items[key];
-  }, paletteKey);
-
-  return parsePalette(stored) ?? defaultPalette;
 };
 
 export const readReport = async (
@@ -208,7 +164,7 @@ export const openWithDiagnostics = async (
 
   if (new URL(page.url()).hostname === "accounts.google.com") {
     throw new Error(
-      `${url} needs a signed-in profile: run \`pnpm run sign-in\` first`
+      `${url} needs a Google sign-in, which these scripts do not support; use a public document`
     );
   }
 

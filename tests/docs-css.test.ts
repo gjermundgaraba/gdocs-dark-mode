@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { toHex } from "../src/color/color.ts";
 import { googleDarkModeTokens } from "../src/docs/docs.ts";
 import { defaultTheme as theme } from "../src/theme/theme.ts";
 import { renderDocsCss } from "../src/ui/docs-css.ts";
@@ -17,10 +16,8 @@ describe("renderDocsCss", () => {
   });
 
   it("themes the main surfaces", () => {
-    expect(declared("--gm3-sys-color-surface")).toBe(toHex(theme.bg));
-    expect(declared("--gm3-sys-color-on-surface")).toBe(toHex(theme.fg));
-    expect(declared("--gm3-sys-color-primary")).toBe(
-      toHex(theme.hues.accent.base)
-    );
+    expect(declared("--gm3-sys-color-surface")).toBe(theme.bg);
+    expect(declared("--gm3-sys-color-on-surface")).toBe(theme.fg);
+    expect(declared("--gm3-sys-color-primary")).toBe(theme.accent);
   });
 });

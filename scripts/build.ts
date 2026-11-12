@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { build } from "vite";
@@ -15,9 +15,7 @@ const dist = path.join(root, "dist");
 
 const scripts = [
   { entry: "src/page/main.ts", output: files.page },
-  { entry: "src/page/bridge.ts", output: files.bridge },
   { entry: "src/background/background.ts", output: files.background },
-  { entry: "src/options/options.ts", output: files.options },
 ] as const;
 
 const bundleAsClassicScript = async (
@@ -51,10 +49,25 @@ for (const { entry, output } of scripts) {
   await bundleAsClassicScript(entry, output);
 }
 
-await copyFile(
-  path.join(root, "src/options/options.html"),
-  path.join(dist, files.optionsPage)
-);
+await build({
+  configFile: false,
+  root: path.join(root, "src/options"),
+  base: "./",
+  logLevel: "warn",
+  build: {
+    outDir: dist,
+    emptyOutDir: false,
+    target: `chrome${minimumChromeVersion}`,
+    minify: false,
+    rolldownOptions: {
+      input: path.join(root, "src/options", files.optionsPage),
+    },
+  },
+});
+
+await cp(path.join(root, "src/extension/icons"), path.join(dist, files.icons), {
+  recursive: true,
+});
 
 await writeFile(
   path.join(dist, "manifest.json"),

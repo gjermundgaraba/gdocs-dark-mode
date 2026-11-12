@@ -1,39 +1,45 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { paletteProblems } from "../src/theme/checks.ts";
+import { reviewPalette } from "../src/theme/checks.ts";
 import { defaultPalette } from "../src/theme/palette.ts";
+import { defaultTheme } from "../src/theme/theme.ts";
 
-describe("paletteProblems", () => {
+describe("reviewPalette", () => {
   it("finds nothing wrong with the default palette", () => {
-    expect(paletteProblems(defaultPalette)).toStrictEqual({
+    expect(reviewPalette(defaultPalette)).toStrictEqual({
+      theme: defaultTheme,
       errors: [],
       warnings: [],
     });
   });
 
   it("refuses a light palette", () => {
-    const { errors } = paletteProblems({
+    const { errors } = reviewPalette({
       ...defaultPalette,
       bg: "#ffffff",
       surface: "#f0f0f0",
       fg: "#101010",
     });
 
-    expect(errors.join("\n")).toMatch(/darker|cannot reach/u);
+    expect(errors).toStrictEqual([
+      "This is a dark theme, so bg must be darker than fg.",
+    ]);
   });
 
   it("refuses a palette whose soft colours cannot be readable", () => {
-    const { errors } = paletteProblems({
+    const { theme, errors } = reviewPalette({
       ...defaultPalette,
-      bg: "#fafafa",
-      surface: "#fafafa",
+      bg: "#8a8a8a",
+      surface: "#8a8a8a",
+      fg: "#ffffff",
     });
 
-    expect(errors).toHaveLength(1);
+    expect(theme).toBeUndefined();
+    expect(errors).toStrictEqual(["soft-accent cannot reach 4.5 contrast"]);
   });
 
   it("warns, without refusing, about low contrast", () => {
-    const { errors, warnings } = paletteProblems({
+    const { errors, warnings } = reviewPalette({
       ...defaultPalette,
       "fg-dim": "#4a4d48",
     });

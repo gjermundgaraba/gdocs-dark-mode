@@ -24,6 +24,7 @@ describe("parseCanvasColor", () => {
       "#fff",
       "color(display-p3 1 0 0)",
       "rgba(300, 0, 0, 1)",
+      "rgb(0, 0, 0)",
       "",
     ]) {
       expect(parseCanvasColor(css)).toBeUndefined();

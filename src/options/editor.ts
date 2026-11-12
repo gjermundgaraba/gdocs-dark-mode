@@ -1,7 +1,7 @@
-import { paletteProblems } from "../theme/checks.ts";
+import { isHexColor } from "../color/color.ts";
+import { reviewPalette } from "../theme/checks.ts";
 import { samePalette } from "../theme/palette.ts";
 import type { Palette, PaletteKey } from "../theme/palette.ts";
-import { createTheme } from "../theme/theme.ts";
 import type { Theme } from "../theme/theme.ts";
 
 /** What the options page holds: the palette being edited and the saved one. */
@@ -22,13 +22,12 @@ export interface EditorView {
   readonly status: string;
 }
 
-const hexInput = /^#?(?<digits>[\da-f]{6})$/iu;
-
 /** Reads a typed colour, `#rrggbb` or `rrggbb` in any case, as `#rrggbb`. */
 export const readHexInput = (text: string): string | undefined => {
-  const digits = hexInput.exec(text.trim())?.groups?.["digits"];
+  const trimmed = text.trim();
+  const hex = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 
-  return digits === undefined ? undefined : `#${digits.toLowerCase()}`;
+  return isHexColor(hex) ? hex.toLowerCase() : undefined;
 };
 
 const statusFor = (errors: number, changed: boolean): string => {
@@ -40,19 +39,19 @@ const statusFor = (errors: number, changed: boolean): string => {
 };
 
 export const viewEditor = (state: EditorState): EditorView => {
-  const problems = paletteProblems(state.draft);
+  const review = reviewPalette(state.draft);
 
   const errors = [
     ...[...state.unreadable].map((key) => `${key} is not a #rrggbb colour.`),
-    ...problems.errors,
+    ...review.errors,
   ];
 
   const changed = !samePalette(state.draft, state.saved);
 
   return {
-    theme: problems.errors.length === 0 ? createTheme(state.draft) : undefined,
+    theme: review.theme,
     errors,
-    warnings: problems.warnings,
+    warnings: review.warnings,
     canSave: errors.length === 0 && changed,
     status: statusFor(errors.length, changed),
   };

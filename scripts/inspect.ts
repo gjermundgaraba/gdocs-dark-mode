@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { luminance, parseCanvasColor } from "../src/color/color.ts";
 import {
   darkModeClass,
   googleDarkModeTokens,
@@ -16,7 +17,7 @@ import {
 
 interface PageFindings {
   readonly darkModeRuleTokens: readonly string[];
-  readonly lightElements: ReadonlyArray<{
+  readonly backgrounds: ReadonlyArray<{
     readonly element: string;
     readonly background: string;
     readonly count: number;
@@ -37,107 +38,107 @@ const minimumOpacity = 0.5;
 
 await mkdir(outDir, { recursive: true });
 
-const { context } = await launchWithExtension(headed);
+const { context } = await launchWithExtension(
+  headed,
+  path.join(outDir, "profile")
+);
 
 try {
   const page = await openWithDiagnostics(context, url);
   await page.screenshot({ path: path.join(outDir, "page.png") });
 
-  const findings: PageFindings = await page.evaluate(
-    ({ darkClass, lightThreshold, opacityThreshold }) => {
-      const darkModeRuleTokens = new Set<string>();
+  const findings: PageFindings = await page.evaluate((darkClass) => {
+    const darkModeRuleTokens = new Set<string>();
 
-      const collect = (rules: CSSRuleList): void => {
-        for (const rule of rules) {
-          if (rule instanceof CSSGroupingRule) {
-            collect(rule.cssRules);
-          }
-
-          if (
-            rule instanceof CSSStyleRule &&
-            rule.selectorText === `.${darkClass}`
-          ) {
-            for (const property of rule.style) {
-              darkModeRuleTokens.add(property);
-            }
-          }
+    const collect = (rules: CSSRuleList): void => {
+      for (const rule of rules) {
+        if (rule instanceof CSSGroupingRule) {
+          collect(rule.cssRules);
         }
-      };
-
-      for (const sheet of document.styleSheets) {
-        try {
-          collect(sheet.cssRules);
-        } catch {
-          continue;
-        }
-      }
-
-      const lightBackground = (css: string): boolean => {
-        const [r = "0", g = "0", b = "0", a = "1"] =
-          css.match(/[\d.]+/gu) ?? [];
-
-        const [red = 0, green = 0, blue = 0] = [r, g, b].map((value) => {
-          const byte = Number(value) / 255;
-
-          return byte <= 0.04045
-            ? byte / 12.92
-            : ((byte + 0.055) / 1.055) ** 2.4;
-        });
-
-        return (
-          Number(a) >= opacityThreshold &&
-          0.2126 * red + 0.7152 * green + 0.0722 * blue > lightThreshold
-        );
-      };
-
-      const light = new Map<
-        string,
-        { element: string; background: string; count: number }
-      >();
-
-      for (const element of document.querySelectorAll("body *")) {
-        const box = element.getBoundingClientRect();
-        const { backgroundColor, maskImage } = getComputedStyle(element);
 
         if (
-          box.width > 0 &&
-          box.height > 0 &&
-          box.bottom > 0 &&
-          box.top < innerHeight &&
-          maskImage === "none" &&
-          lightBackground(backgroundColor)
+          rule instanceof CSSStyleRule &&
+          rule.selectorText === `.${darkClass}`
         ) {
-          const id = element.id === "" ? "" : `#${element.id}`;
-          const classes = [...element.classList].slice(0, 3).join(".");
-          const key = `${element.tagName.toLowerCase()}${id}${classes === "" ? "" : `.${classes}`}`;
-
-          const entry = light.get(key) ?? {
-            element: key,
-            background: backgroundColor,
-            count: 0,
-          };
-
-          entry.count += 1;
-          light.set(key, entry);
+          for (const property of rule.style) {
+            darkModeRuleTokens.add(property);
+          }
         }
       }
+    };
 
-      return {
-        darkModeRuleTokens: [...darkModeRuleTokens].toSorted(),
-        lightElements: [...light.values()],
-        canvases: [...document.querySelectorAll("canvas")].map((canvas) => ({
-          canvasClass: canvas.className,
-          parentClass: canvas.parentElement?.className ?? "",
-          size: `${canvas.width}x${canvas.height}`,
-        })),
-      };
-    },
-    {
-      darkClass: darkModeClass,
-      lightThreshold: lightLuminance,
-      opacityThreshold: minimumOpacity,
+    for (const sheet of document.styleSheets) {
+      try {
+        collect(sheet.cssRules);
+      } catch {
+        continue;
+      }
     }
-  );
+
+    const colorReader = document.createElement("canvas").getContext("2d");
+
+    const inCanvasForm = (css: string): string => {
+      if (colorReader === null) {
+        return css;
+      }
+
+      colorReader.fillStyle = css;
+
+      return colorReader.fillStyle;
+    };
+
+    const backgrounds = new Map<
+      string,
+      { element: string; background: string; count: number }
+    >();
+
+    for (const element of document.querySelectorAll("body *")) {
+      const box = element.getBoundingClientRect();
+      const { backgroundColor, maskImage } = getComputedStyle(element);
+
+      if (
+        box.width > 0 &&
+        box.height > 0 &&
+        box.bottom > 0 &&
+        box.top < innerHeight &&
+        maskImage === "none" &&
+        backgroundColor !== "rgba(0, 0, 0, 0)"
+      ) {
+        const id = element.id === "" ? "" : `#${element.id}`;
+        const classes = [...element.classList].slice(0, 3).join(".");
+        const key = `${element.tagName.toLowerCase()}${id}${classes === "" ? "" : `.${classes}`}`;
+
+        const entry = backgrounds.get(key) ?? {
+          element: key,
+          background: inCanvasForm(backgroundColor),
+          count: 0,
+        };
+
+        entry.count += 1;
+        backgrounds.set(key, entry);
+      }
+    }
+
+    return {
+      darkModeRuleTokens: [...darkModeRuleTokens].toSorted(),
+      backgrounds: [...backgrounds.values()],
+      canvases: [...document.querySelectorAll("canvas")].map((canvas) => ({
+        canvasClass: canvas.className,
+        parentClass: canvas.parentElement?.className ?? "",
+        size: `${canvas.width}x${canvas.height}`,
+      })),
+    };
+  }, darkModeClass);
+
+  const lightElements = findings.backgrounds.filter(({ background }) => {
+    const color = parseCanvasColor(background);
+
+    return (
+      color !== undefined &&
+      color.a >= minimumOpacity &&
+      luminance(color) > lightLuminance
+    );
+  });
 
   const themed = findings.darkModeRuleTokens.filter(
     (token) =>
@@ -153,7 +154,7 @@ try {
     newGoogleTokens: themed.filter((token) => !known.has(token)),
     goneGoogleTokens: googleDarkModeTokens.filter((token) => !live.has(token)),
     darkModeRuleFound: findings.darkModeRuleTokens.length > 0,
-    lightElements: findings.lightElements,
+    lightElements,
     canvases: findings.canvases,
     report: await readReport(page),
   };
