@@ -2,8 +2,9 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import type { Page } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 
+import { scriptId } from "../src/background/registration.ts";
 import { refreshMessage } from "../src/extension/messages.ts";
 import { enabledKey, paletteKey } from "../src/settings/settings.ts";
 import { reviewPalette } from "../src/theme/checks.ts";
@@ -88,6 +89,57 @@ const staysPutThroughUnchangedRefresh = async (
   );
 };
 
+const reloadExtension = async (
+  context: BrowserContext,
+  optionsPage: Page
+): Promise<Page> => {
+  const optionsUrl = optionsPage.url();
+  const extensionId = new URL(optionsUrl).host;
+  const details = await context.newPage();
+  await details.goto("chrome://extensions/");
+  await details.locator("#devMode").click();
+  await details.goto(`chrome://extensions/?id=${extensionId}`);
+  await details.locator("extensions-detail-view #dev-reload-button").click();
+  await details.close();
+
+  const reopened = await context.newPage();
+  await waitUntil("the extension to come back", async () => {
+    try {
+      await reopened.goto(optionsUrl);
+
+      return await reopened.evaluate(async (id) => {
+        const scripts = await chrome.userScripts.getScripts();
+
+        return scripts.some((script) => script.id === id);
+      }, scriptId);
+    } catch {
+      return false;
+    }
+  });
+
+  return reopened;
+};
+
+const staysPutThroughExtensionReload = async (
+  context: BrowserContext,
+  optionsPage: Page,
+  page: Page
+): Promise<{ readonly stayed: boolean; readonly optionsPage: Page }> => {
+  await page.evaluate(
+    (marker) => Reflect.set(globalThis, marker, true),
+    pageMarker
+  );
+  const reopened = await reloadExtension(context, optionsPage);
+  await page.waitForTimeout(3000);
+
+  const stayed = await page.evaluate(
+    (marker) => Reflect.has(globalThis, marker),
+    pageMarker
+  );
+
+  return { stayed, optionsPage: reopened };
+};
+
 const switchOff = async (optionsPage: Page, page: Page): Promise<string> => {
   await optionsPage.evaluate(async (key) => {
     await chrome.storage.local.set({ [key]: false });
@@ -148,7 +200,13 @@ try {
   const storedAfterReset = await storedPalette(optionsPage);
   const stayed = await staysPutThroughUnchangedRefresh(optionsPage, page);
 
-  const offPixel = await switchOff(optionsPage, page).catch(String);
+  const afterUpdate = await staysPutThroughExtensionReload(
+    context,
+    optionsPage,
+    page
+  );
+
+  const offPixel = await switchOff(afterUpdate.optionsPage, page).catch(String);
 
   const checks: Check[] = [
     {
@@ -175,6 +233,11 @@ try {
       name: "a refresh with nothing changed leaves documents alone",
       ok: stayed,
       detail: stayed ? "not reloaded" : "the document reloaded",
+    },
+    {
+      name: "an extension update leaves themed documents alone",
+      ok: afterUpdate.stayed,
+      detail: afterUpdate.stayed ? "not reloaded" : "the document reloaded",
     },
     {
       name: "switching off reloads documents unthemed",
