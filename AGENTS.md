@@ -11,7 +11,8 @@ The toolchain is Vite+ (`vp`) with pnpm. `vp check` formats, lints and type-chec
 - `pnpm run verify [--url <doc>] [--headed]`: build, load `dist/` into Playwright's Chromium, open a document (the public one by default) with diagnostics on, and run the end-to-end checks. Output goes to `.cache/verify/`.
 - `pnpm run verify-options [--url <doc>] [--headed]`: build, then import a `tokens.json` and edit a colour on the options page, save, check a document uses the palette, also with its cached copy cleared (switched in place before Docs draws, no extra reload), reset it and check the reloaded document started with the new palette cached, check a settings write that changes nothing and an extension reload both leave documents alone, and switch dark mode off. Output goes to `.cache/verify-options/`.
 - `pnpm run inspect [--url <doc>] [--headed]`: list Google's dark-mode tokens against `googleDarkModeTokens`, light interface elements, and canvases. Output goes to `.cache/inspect/`.
-- `pnpm run render-icons`: redraw the toolbar icons in `src/extension/icons/` from the default theme.
+- `pnpm run render-icons`: redraw the toolbar icons in `src/extension/icons/` from the default theme. The 128 px icon doubles as the Web Store icon, so it is drawn at 96 px inside 16 px of transparent padding.
+- `pnpm run package`: build, then zip `dist/` into `gdocs-dark-mode-<version>.zip` for upload to the Chrome Web Store. The version comes from `package.json`; each upload needs a higher one.
 
 Each Playwright script starts from a new profile with the extension loaded and its options page open. The scripts cannot sign in to Google, so they only open documents anyone with the link can view.
 
@@ -32,7 +33,7 @@ When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakag
 - `src/options/` is the options page: `editor.ts` is the pure model (draft, saved palette, what to show), `page-style.ts` themes the page from the draft, and `options.ts` wires the DOM. Import reads `palette.dark` from a gg-theme `tokens.json` once; it is a snapshot, not a link to the file.
 - `src/background/` is the service worker. Dark mode is on exactly while the page scripts are registered, so the page never asks. One refresh brings the registration in line with the settings, reloads open documents if they were loaded with another palette or with dark mode in the other state, writing the new palette into their cache first so they draw with it from the start, and sets the icon. The palette documents were last reloaded with is kept in storage, so restoring a registration Chrome cleared on an extension update reloads nothing: documents already open keep the page script they loaded with. The refresh runs when the worker starts, on browser startup, and when a setting changes (the options page only writes settings). A toolbar click flips the saved setting in the same queue as the refreshes, so rapid clicks each see the previous one, and the setting change triggers the refresh.
 - `src/extension/` holds the manifest, the built file names, and the static icons (on and off).
-- `scripts/` holds the build and the Playwright tooling. Scripts share their browser setup through `scripts/browser.ts`, which drives the extension through its options page, and print results through `scripts/checks.ts`.
+- `scripts/` holds the build, the packaging and the Playwright tooling. Scripts share their browser setup through `scripts/browser.ts`, which drives the extension through its options page, and print results through `scripts/checks.ts`.
 
 # Platform behaviour the code relies on
 

@@ -4,8 +4,8 @@ import { iconPaths } from "../extension/files.ts";
 export type ExtensionState = "on" | "off";
 
 const titles: Record<ExtensionState, string> = {
-  on: "Google Docs dark mode: on (click to switch off)",
-  off: "Google Docs dark mode: off (click to switch on)",
+  on: "Dark mode for Google Docs: on (click to switch off)",
+  off: "Dark mode for Google Docs: off (click to switch on)",
 };
 
 /** Sets the toolbar icon and tooltip for `state`. */

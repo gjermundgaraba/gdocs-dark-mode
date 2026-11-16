@@ -25,6 +25,10 @@ Only the 14 colours Docs uses can be set; gg-theme's terminal and cursor colours
 
 The default palette comes from `@gjermundgaraba/gg-theme`. Bump its version in `pnpm-workspace.yaml`, run `pnpm install && pnpm run render-icons && pnpm run build`, and reload the extension. The toolbar icon is drawn in the default theme's colours, hence `render-icons`.
 
+## Publishing
+
+Bump `version` in `package.json` (the Chrome Web Store rejects an upload whose version is not higher than the last), then run `pnpm run package` and upload `gdocs-dark-mode-<version>.zip` in the developer dashboard.
+
 ## When Docs breaks it
 
 `pnpm run verify` loads the extension into Playwright's Chromium, opens a document, and checks that the page is themed. `pnpm run verify-options` checks the options page end to end. With a coding agent, run `/fix-docs-breakage`; see `AGENTS.md` for how the pieces fit together.

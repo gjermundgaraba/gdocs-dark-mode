@@ -30,7 +30,10 @@ const colors: Record<IconState, IconColors> = {
   off: { page: "#ffffff", ink: "#5f6368", accent: "#5f6368" },
 };
 
-const browser = await chromium.launch();
+/** https://developer.chrome.com/docs/webstore/images#icons */
+const storeIconPadding = (size: number): number => (size === 128 ? 16 : 0);
+
+const browser = await chromium.launch({ channel: "chromium" });
 
 try {
   const page = await browser.newPage();
@@ -49,7 +52,8 @@ try {
             throw new Error("no 2D context");
           }
 
-          const unit = icon.size / 16;
+          const unit = (icon.size - 2 * icon.padding) / 16;
+          context.translate(icon.padding, icon.padding);
           context.fillStyle = icon.paper;
           context.strokeStyle = icon.ink;
           context.lineWidth = unit;
@@ -78,7 +82,7 @@ try {
 
           return canvas.toDataURL("image/png");
         },
-        { size, paper, ink, accent }
+        { size, padding: storeIconPadding(size), paper, ink, accent }
       );
 
       await writeFile(
