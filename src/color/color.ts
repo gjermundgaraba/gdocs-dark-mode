@@ -177,11 +177,9 @@ export const luminance = ({ r, g, b }: Rgba): number =>
 
 /** WCAG 2 contrast ratio of two opaque colours. */
 export const contrast = (x: Rgba, y: Rgba): number => {
-  const [lighter, darker] = [luminance(x), luminance(y)].toSorted(
-    (p, q) => q - p
-  );
+  const [lx, ly] = [luminance(x), luminance(y)];
 
-  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+  return (Math.max(lx, ly) + 0.05) / (Math.min(lx, ly) + 0.05);
 };
 
 /**

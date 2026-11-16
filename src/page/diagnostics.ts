@@ -29,9 +29,22 @@ export interface DiagnosticsReport {
   readonly offscreenTransfers: number;
   /** Whether `<html>` still carries the dark-mode class. */
   readonly darkModeClassPresent: boolean;
+  /**
+   * Recoloured draws made before the palette arrived from extension storage,
+   * or `null` until it arrives. Above 0, a palette that differed from the
+   * cached one would have cost a reload.
+   */
+  readonly drawsBeforePaletteArrived: number | null;
+  /**
+   * Whether the palette from extension storage differed from the one the page
+   * started with, or `null` until it arrives. `false` after a reload the
+   * worker caused means it left the new palette in the cache first.
+   */
+  readonly paletteChangedOnArrival: boolean | null;
 }
 
 export interface Diagnostics extends DrawObserver {
+  readonly onPaletteArrived: (changed: boolean) => void;
   readonly report: () => DiagnosticsReport;
 }
 
@@ -65,6 +78,11 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
   const colors = new Map<string, ColorRecord>();
 
   let offscreenTransfers = 0;
+  let drawsBeforePaletteArrived: number | null = null;
+  let paletteChangedOnArrival: boolean | null = null;
+
+  const recolouredCount = (): number =>
+    Object.values(recolouredDraws).reduce((sum, count) => sum + count, 0);
 
   const transfer = HTMLCanvasElement.prototype.transferControlToOffscreen;
   HTMLCanvasElement.prototype.transferControlToOffscreen =
@@ -81,6 +99,10 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
       } else {
         increment(otherCanvasDraws, canvas.className || "(none)");
       }
+    },
+    onPaletteArrived: (changed) => {
+      drawsBeforePaletteArrived ??= recolouredCount();
+      paletteChangedOnArrival ??= changed;
     },
     onColor: (css, role, mapped) => {
       const key = `${role} ${css}`;
@@ -107,6 +129,8 @@ export const createDiagnostics = (darkModeClass: string): Diagnostics => {
         offscreenTransfers,
         darkModeClassPresent:
           document.documentElement.classList.contains(darkModeClass),
+        drawsBeforePaletteArrived,
+        paletteChangedOnArrival,
       };
     },
   };

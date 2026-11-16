@@ -15,6 +15,7 @@ const dist = path.join(root, "dist");
 
 const scripts = [
   { entry: "src/page/main.ts", output: files.page },
+  { entry: "src/page/palette-sync.ts", output: files.paletteSync },
   { entry: "src/background/background.ts", output: files.background },
 ] as const;
 

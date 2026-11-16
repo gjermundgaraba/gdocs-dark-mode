@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import type { BrowserContext, Page } from "playwright";
 
-import { scriptId } from "../src/background/registration.ts";
+import { pageScriptsRegistered } from "../src/background/registration.ts";
 import { pageCanvasClass } from "../src/docs/docs.ts";
 import { files } from "../src/extension/files.ts";
 import { debugStorageKey } from "../src/page/diagnostics.ts";
@@ -73,38 +73,27 @@ export interface LoadedExtension {
   readonly optionsPage: Page;
 }
 
-const allowUserScripts = async (
-  context: BrowserContext,
-  extensionId: string
-): Promise<void> => {
-  const details = await context.newPage();
-  await details.goto(`chrome://extensions/?id=${extensionId}`);
-  await details.locator("#allow-user-scripts").click();
-  await details.close();
-};
+/** Whether the worker has registered the page scripts, asked from an extension page. */
+export const pageScriptsRegisteredIn = async (
+  extensionPage: Page
+): Promise<boolean> =>
+  pageScriptsRegistered(
+    await extensionPage.evaluate(
+      async () => await chrome.scripting.getRegisteredContentScripts()
+    )
+  );
 
 const waitForRegistration = async (optionsPage: Page): Promise<void> => {
-  await waitUntil("the page script to be registered", async () => {
-    const registered = await optionsPage.evaluate(async () => {
-      try {
-        const scripts = await chrome.userScripts.getScripts();
-
-        return scripts.map(({ id }) => id);
-      } catch {
-        return [];
-      }
-    });
-
-    return registered.join(",") === scriptId;
-  });
+  await waitUntil(
+    "the page scripts to be registered",
+    async () => await pageScriptsRegisteredIn(optionsPage)
+  );
 };
 
 /**
  * Playwright's Chromium with the built extension loaded into a new profile at
- * `profile`, set up the way a user would: "Allow User Scripts" turned on, then
- * the options page opened, which has the extension register its page script.
- * Resolves once it is registered; a document opened earlier would load
- * unthemed.
+ * `profile`, with the options page open. Resolves once the worker has
+ * registered the page scripts; a document opened earlier would load unthemed.
  */
 export const launchWithExtension = async (
   headed: boolean,
@@ -127,7 +116,6 @@ export const launchWithExtension = async (
     (await context.waitForEvent("serviceworker"));
 
   const extensionId = new URL(worker.url()).host;
-  await allowUserScripts(context, extensionId);
   const optionsPage = await context.newPage();
   await optionsPage.goto(
     `chrome-extension://${extensionId}/${files.optionsPage}`

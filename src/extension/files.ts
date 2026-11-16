@@ -2,6 +2,7 @@
 export const files = {
   background: "background.js",
   page: "docs-theme.js",
+  paletteSync: "docs-palette.js",
   optionsPage: "options.html",
   icons: "icons",
 } as const;

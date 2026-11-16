@@ -4,8 +4,7 @@ import path from "node:path";
 
 import type { BrowserContext, Page } from "playwright";
 
-import { scriptId } from "../src/background/registration.ts";
-import { refreshMessage } from "../src/extension/messages.ts";
+import { paletteCacheKey } from "../src/page/palette-cache.ts";
 import { enabledKey, paletteKey } from "../src/settings/settings.ts";
 import { reviewPalette } from "../src/theme/checks.ts";
 import {
@@ -18,8 +17,10 @@ import {
   launchWithExtension,
   openWithDiagnostics,
   outputDir,
+  pageScriptsRegisteredIn,
   parseDocumentArgs,
   readPageMarginPixel,
+  readReport,
   waitForDocsToDraw,
   waitUntil,
 } from "./browser.ts";
@@ -70,25 +71,6 @@ const saveOptions = async (page: Page): Promise<void> => {
 
 const pageMarker = "verifyOptionsMarker";
 
-const staysPutThroughUnchangedRefresh = async (
-  optionsPage: Page,
-  page: Page
-): Promise<boolean> => {
-  await page.evaluate(
-    (marker) => Reflect.set(globalThis, marker, true),
-    pageMarker
-  );
-  await optionsPage.evaluate(async (message) => {
-    await chrome.runtime.sendMessage(message);
-  }, refreshMessage);
-  await page.waitForTimeout(3000);
-
-  return await page.evaluate(
-    (marker) => Reflect.has(globalThis, marker),
-    pageMarker
-  );
-};
-
 const reloadExtension = async (
   context: BrowserContext,
   optionsPage: Page
@@ -107,11 +89,7 @@ const reloadExtension = async (
     try {
       await reopened.goto(optionsUrl);
 
-      return await reopened.evaluate(async (id) => {
-        const scripts = await chrome.userScripts.getScripts();
-
-        return scripts.some((script) => script.id === id);
-      }, scriptId);
+      return await pageScriptsRegisteredIn(reopened);
     } catch {
       return false;
     }
@@ -120,24 +98,64 @@ const reloadExtension = async (
   return reopened;
 };
 
-const staysPutThroughExtensionReload = async (
-  context: BrowserContext,
-  optionsPage: Page,
-  page: Page
-): Promise<{ readonly stayed: boolean; readonly optionsPage: Page }> => {
+const stayedThrough = async (
+  page: Page,
+  action: () => Promise<unknown>
+): Promise<boolean> => {
   await page.evaluate(
     (marker) => Reflect.set(globalThis, marker, true),
     pageMarker
   );
-  const reopened = await reloadExtension(context, optionsPage);
+  await action();
   await page.waitForTimeout(3000);
 
-  const stayed = await page.evaluate(
+  return await page.evaluate(
     (marker) => Reflect.has(globalThis, marker),
     pageMarker
   );
+};
 
-  return { stayed, optionsPage: reopened };
+const storeDefaultPaletteExplicitly = async (
+  optionsPage: Page
+): Promise<void> => {
+  await optionsPage.evaluate(
+    async ([key, palette]) => {
+      await chrome.storage.local.set({ [key]: palette });
+    },
+    [paletteKey, defaultPalette] as const
+  );
+};
+
+interface ColdCacheLoad {
+  readonly pixel: string;
+  readonly loads: number;
+  readonly drawsBeforePaletteArrived: number | null | undefined;
+  readonly paletteChanged: boolean | null | undefined;
+}
+
+const loadWithEmptyCache = async (page: Page): Promise<ColdCacheLoad> => {
+  await page.evaluate((key) => {
+    localStorage.removeItem(key);
+  }, paletteCacheKey);
+
+  let loads = 0;
+
+  const countLoad = (): void => {
+    loads += 1;
+  };
+
+  page.on("load", countLoad);
+  await page.reload({ waitUntil: "load" });
+  await waitForDocsToDraw(page);
+  page.off("load", countLoad);
+  const report = await readReport(page);
+
+  return {
+    pixel: await readPageMarginPixel(page),
+    loads,
+    drawsBeforePaletteArrived: report?.drawsBeforePaletteArrived,
+    paletteChanged: report?.paletteChangedOnArrival,
+  };
 };
 
 const switchOff = async (optionsPage: Page, page: Page): Promise<string> => {
@@ -190,6 +208,7 @@ try {
   const page = await openWithDiagnostics(context, url);
   const customPixel = await readPageMarginPixel(page);
   await page.screenshot({ path: path.join(outDir, "custom.png") });
+  const cold = await loadWithEmptyCache(page);
 
   const reloaded = page.waitForEvent("load");
   await optionsPage.locator("#default").click();
@@ -197,16 +216,20 @@ try {
   await reloaded;
   await waitForDocsToDraw(page);
   const defaultPixel = await readPageMarginPixel(page);
+  const resetReport = await readReport(page);
   const storedAfterReset = await storedPalette(optionsPage);
-  const stayed = await staysPutThroughUnchangedRefresh(optionsPage, page);
 
-  const afterUpdate = await staysPutThroughExtensionReload(
-    context,
-    optionsPage,
-    page
-  );
+  const stayedThroughUnchangedWrite = await stayedThrough(page, async () => {
+    await storeDefaultPaletteExplicitly(optionsPage);
+  });
 
-  const offPixel = await switchOff(afterUpdate.optionsPage, page).catch(String);
+  let reopened = optionsPage;
+
+  const stayedThroughUpdate = await stayedThrough(page, async () => {
+    reopened = await reloadExtension(context, optionsPage);
+  });
+
+  const offPixel = await switchOff(reopened, page).catch(String);
 
   const checks: Check[] = [
     {
@@ -220,6 +243,15 @@ try {
       detail: `pixel ${customPixel}, expected ${editedBg}`,
     },
     {
+      name: "with no cached palette, the stored one applies before Docs draws",
+      ok:
+        cold.pixel === editedBg &&
+        cold.loads === 1 &&
+        cold.paletteChanged === true &&
+        cold.drawsBeforePaletteArrived === 0,
+      detail: `pixel ${cold.pixel}, ${cold.loads} load(s), switched in place: ${String(cold.paletteChanged)}, ${String(cold.drawsBeforePaletteArrived)} draws before the palette arrived`,
+    },
+    {
       name: "saving the default clears the saved palette",
       ok: storedAfterReset === undefined,
       detail: `stored: ${JSON.stringify(storedAfterReset) ?? "nothing"}`,
@@ -230,14 +262,21 @@ try {
       detail: `pixel ${defaultPixel}, expected ${defaultPalette.bg}`,
     },
     {
-      name: "a refresh with nothing changed leaves documents alone",
-      ok: stayed,
-      detail: stayed ? "not reloaded" : "the document reloaded",
+      name: "documents reloaded for a change start with the new palette cached",
+      ok: resetReport?.paletteChangedOnArrival === false,
+      detail: `palette changed on arrival: ${String(resetReport?.paletteChangedOnArrival)}`,
+    },
+    {
+      name: "a settings write that changes nothing leaves documents alone",
+      ok: stayedThroughUnchangedWrite,
+      detail: stayedThroughUnchangedWrite
+        ? "not reloaded"
+        : "the document reloaded",
     },
     {
       name: "an extension update leaves themed documents alone",
-      ok: afterUpdate.stayed,
-      detail: afterUpdate.stayed ? "not reloaded" : "the document reloaded",
+      ok: stayedThroughUpdate,
+      detail: stayedThroughUpdate ? "not reloaded" : "the document reloaded",
     },
     {
       name: "switching off reloads documents unthemed",

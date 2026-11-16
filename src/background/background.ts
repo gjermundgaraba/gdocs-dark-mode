@@ -1,5 +1,3 @@
-import { refreshMessage } from "../extension/messages.ts";
-import { userScriptsAllowed } from "../extension/user-scripts.ts";
 import {
   enabledKey,
   paletteKey,
@@ -17,13 +15,9 @@ interface Update {
 }
 
 const update = async (): Promise<Update> => {
-  if (!(await userScriptsAllowed())) {
-    return { state: "blocked", documentsReloaded: false };
-  }
-
   const enabled = await readEnabled();
   const palette = enabled ? await readPalette() : undefined;
-  await syncPageScript(palette);
+  await syncPageScript(enabled);
 
   return {
     state: enabled ? "on" : "off",
@@ -55,45 +49,20 @@ const refresh = (): void => {
   oneAtATime(sync).catch(report);
 };
 
-const toggleOnceInSync = async (): Promise<void> => {
-  if (!(await userScriptsAllowed())) {
-    await chrome.runtime.openOptionsPage();
-
-    return;
-  }
-
-  if (!(await sync())) {
-    await writeEnabled(!(await readEnabled()));
-    await sync();
-  }
-};
-
-const openSetupIfBlocked = async (): Promise<void> => {
-  if (!(await userScriptsAllowed())) {
-    await chrome.runtime.openOptionsPage();
-  }
+const toggle = async (): Promise<void> => {
+  await writeEnabled(!(await readEnabled()));
 };
 
 refresh();
 
 chrome.runtime.onStartup.addListener(refresh);
 
-chrome.runtime.onInstalled.addListener(() => {
-  openSetupIfBlocked().catch(report);
-});
-
 chrome.action.onClicked.addListener(() => {
-  oneAtATime(toggleOnceInSync).catch(report);
+  oneAtATime(toggle).catch(report);
 });
 
 chrome.storage.local.onChanged.addListener((changes) => {
   if (enabledKey in changes || paletteKey in changes) {
-    refresh();
-  }
-});
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message === refreshMessage) {
     refresh();
   }
 });

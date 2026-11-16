@@ -1,8 +1,6 @@
 import { hueNames } from "@gjermundgaraba/gg-theme/derive";
 import type { HueName } from "@gjermundgaraba/gg-theme/derive";
 
-import { refreshMessage } from "../extension/messages.ts";
-import { userScriptsAllowed } from "../extension/user-scripts.ts";
 import {
   readPalette,
   resetPalette,
@@ -224,30 +222,5 @@ const start = async (): Promise<void> => {
 const report = (error: unknown): void => {
   console.error("gdocs-dark-mode options:", error);
 };
-
-const blockedRecheckMs = 1000;
-
-const showSetupUntilAllowed = async (): Promise<void> => {
-  const allowed = await userScriptsAllowed();
-  required("#setup", HTMLElement).hidden = allowed;
-
-  if (allowed) {
-    await chrome.runtime.sendMessage(refreshMessage);
-
-    return;
-  }
-
-  setTimeout(() => {
-    showSetupUntilAllowed().catch(report);
-  }, blockedRecheckMs);
-};
-
-required("#open-details", HTMLButtonElement).addEventListener("click", () => {
-  chrome.tabs
-    .create({ url: `chrome://extensions/?id=${chrome.runtime.id}` })
-    .catch(report);
-});
-
-showSetupUntilAllowed().catch(report);
 
 start().catch(report);
