@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+step() {
+  local started=$SECONDS
+  echo "==> $*"
+  "$@"
+  echo "    done in $((SECONDS - started))s"
+}
+
+echo "node $(node --version), pnpm $(pnpm --version)"
+
+export CI=true
+step pnpm install --frozen-lockfile
+
+step pnpm exec playwright install --with-deps --no-shell chromium

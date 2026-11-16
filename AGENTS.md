@@ -15,6 +15,8 @@ The toolchain is Vite+ (`vp`) with pnpm. `vp check` formats, lints and type-chec
 
 Each Playwright script starts from a new profile and turns on "Allow User Scripts" the way a user would. The scripts cannot sign in to Google, so they only open documents anyone with the link can view.
 
+In Amp orbs, `.agents/setup` installs the dependencies and Playwright's Chromium, and `.agents/resume` sets `vm.overcommit_memory=1`: oxlint's allocator reserves more address space than an orb has memory, and under the default heuristic overcommit `vp check` panics before linting.
+
 When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakage/SKILL.md`.
 
 # Architecture
