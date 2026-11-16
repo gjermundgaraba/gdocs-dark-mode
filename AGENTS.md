@@ -17,7 +17,7 @@ Each Playwright script starts from a new profile and turns on "Allow User Script
 
 In Amp orbs, `.agents/setup` installs the dependencies and Playwright's Chromium, and `.agents/resume` sets `vm.overcommit_memory=1`: oxlint's allocator reserves more address space than an orb has memory, and under the default heuristic overcommit `vp check` panics before linting.
 
-When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakage/SKILL.md`.
+When a Docs update breaks the extension, follow `.agents/skills/fix-docs-breakage/SKILL.md`. For Chrome extension APIs, read the `chrome-extensions` skill: Google's, from the `modern-web-guidance` dev dependency, which pnpm links into `.agents/skills` and `.claude/skills` on install. Its rules are written for extensions in general; where this file documents a different choice, such as running bundled code as a user script, this file wins.
 
 # Architecture
 

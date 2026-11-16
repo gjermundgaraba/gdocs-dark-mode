@@ -4,6 +4,7 @@ catalog:
   "@gjermundgaraba/gg-theme": 0.6.0
   "@types/chrome": 0.3.7
   "@types/node": 26.6.6
+  modern-web-guidance: 1.0.0
   playwright: 1.65.0
   typescript: 7.0.2
   ultracite: 8.1.1
@@ -40,6 +41,8 @@ peerDependencyRules:
 allowBuilds:
   playwright: false
 permissions:
+  modern-web-guidance:
+    skills: [chrome-extensions]
   ultracite:
     skills: true
 skills:
