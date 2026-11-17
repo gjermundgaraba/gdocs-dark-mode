@@ -2,7 +2,7 @@
   "name": "gdocs-dark-mode",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome extension that themes Google Docs with the gg dark palette.",
+  "description": "Chrome extension that gives Google Docs, including the document page, a dark theme.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -18,7 +18,6 @@
   "devDependencies": {
     "@clanker-stuff/oxlint-config": "catalog:",
     "@effect/tsgo": "catalog:",
-    "@gjermundgaraba/gg-theme": "catalog:",
     "@types/chrome": "catalog:",
     "@types/node": "catalog:",
     "fflate": "catalog:",

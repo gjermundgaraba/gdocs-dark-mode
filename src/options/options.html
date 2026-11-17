@@ -131,9 +131,9 @@
   <body>
     <h1>Dark Mode for Google Docs</h1>
     <p>
-      Set the colours Docs is themed with, or import them from a gg-theme
-      <code>tokens.json</code>. The washes, tints and soft colours are derived
-      from these the way gg-theme derives them. Saving reloads open documents.
+      Set the colours Docs is themed with. The washes, tints and soft colours
+      are derived from these. Export saves the colours shown here to a file that
+      Import reads back. Saving reloads open documents.
     </p>
 
     <h2>Base</h2>
@@ -148,12 +148,10 @@
 
     <div class="actions">
       <label class="import"
-        >Import tokens.json…<input
-          type="file"
-          id="import"
-          accept=".json,application/json"
+        >Import…<input type="file" id="import" accept=".json,application/json"
       /></label>
-      <button type="button" id="default">Use gg default</button>
+      <button type="button" id="export">Export</button>
+      <button type="button" id="default">Use default</button>
       <button type="button" id="revert">Revert</button>
       <button type="button" id="save">Save</button>
       <span id="status" role="status"></span>

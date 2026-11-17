@@ -1,5 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { BrowserContext, Page } from "playwright";
@@ -9,6 +8,7 @@ import { enabledKey, paletteKey } from "../src/settings/settings.ts";
 import { reviewPalette } from "../src/theme/checks.ts";
 import {
   defaultPalette,
+  paletteFromFile,
   parsePalette,
   samePalette,
 } from "../src/theme/palette.ts";
@@ -29,36 +29,17 @@ import type { Check } from "./checks.ts";
 
 const { url, headed } = parseDocumentArgs();
 const outDir = outputDir("verify-options");
+const exportedFile = path.join(outDir, "exported-colours.json");
 const profile = path.join(outDir, "profile");
-const importedTokens = path.join(outDir, "tokens.json");
 
-const importedAccent = "#5fafff";
+const editedAccent = "#5fafff";
 const editedBg = "#1d2021";
 
 const custom: Palette = {
   ...defaultPalette,
-  accent: importedAccent,
+  accent: editedAccent,
   bg: editedBg,
 };
-
-const writeImportedTokens = async (): Promise<void> => {
-  const tokensPath = createRequire(import.meta.url).resolve(
-    "@gjermundgaraba/gg-theme/tokens"
-  );
-
-  const tokens = await readFile(tokensPath, "utf8");
-
-  await writeFile(
-    importedTokens,
-    tokens.replace(
-      `"accent": "${defaultPalette.accent}"`,
-      `"accent": "${importedAccent}"`
-    )
-  );
-};
-
-const fieldValue = async (page: Page, key: string): Promise<string> =>
-  await page.locator(`#colour-${key}`).inputValue();
 
 const saveOptions = async (page: Page): Promise<void> => {
   await page.locator("#save").click();
@@ -185,8 +166,6 @@ await rm(outDir, { recursive: true, force: true });
 
 await mkdir(outDir, { recursive: true });
 
-await writeImportedTokens();
-
 if (reviewPalette(custom).theme === undefined) {
   throw new Error("the custom palette under test is not saveable");
 }
@@ -194,13 +173,27 @@ if (reviewPalette(custom).theme === undefined) {
 const { context, optionsPage } = await launchWithExtension(headed, profile);
 
 try {
-  await optionsPage.locator("#import").setInputFiles(importedTokens);
-  await waitUntil("the import", async () => {
-    const accent = await fieldValue(optionsPage, "accent");
-
-    return accent === importedAccent;
-  });
+  await optionsPage
+    .getByLabel("accent hex", { exact: true })
+    .fill(editedAccent);
   await optionsPage.getByLabel("bg hex", { exact: true }).fill(editedBg);
+
+  const [download] = await Promise.all([
+    optionsPage.waitForEvent("download"),
+    optionsPage.locator("#export").click(),
+  ]);
+
+  await download.saveAs(exportedFile);
+  const exported = paletteFromFile(await readFile(exportedFile, "utf8"));
+  await optionsPage.locator("#default").click();
+  await optionsPage.locator("#import").setInputFiles(exportedFile);
+  await waitUntil("the import", async () => {
+    const accent = await optionsPage
+      .getByLabel("accent hex", { exact: true })
+      .inputValue();
+
+    return accent === editedAccent;
+  });
   await optionsPage.screenshot({ path: path.join(outDir, "options.png") });
   await saveOptions(optionsPage);
   const saved = parsePalette(await storedPalette(optionsPage));
@@ -233,7 +226,15 @@ try {
 
   const checks: Check[] = [
     {
-      name: "import and edit are saved",
+      name: "export writes the colours shown",
+      ok: !("error" in exported) && samePalette(exported, custom),
+      detail:
+        "error" in exported
+          ? exported.error
+          : `exported bg ${exported.bg}, accent ${exported.accent}`,
+    },
+    {
+      name: "importing the export and saving keeps the edits",
       ok: saved !== undefined && samePalette(saved, custom),
       detail: `saved bg ${saved?.bg ?? "none"}, accent ${saved?.accent ?? "none"}`,
     },

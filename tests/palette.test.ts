@@ -1,22 +1,20 @@
-import tokens from "@gjermundgaraba/gg-theme/tokens" with { type: "json" };
 import { describe, expect, it } from "vite-plus/test";
 
+import { contrast, parseHex } from "../src/color/color.ts";
 import {
   defaultPalette,
-  paletteFromTokensFile,
+  hueNames,
+  paletteFromFile,
   paletteKeys,
+  paletteToFile,
   parsePalette,
-  samePalette,
 } from "../src/theme/palette.ts";
 import { createTheme, defaultTheme } from "../src/theme/theme.ts";
-
-const tokensFile = JSON.stringify(tokens);
+import type { Theme } from "../src/theme/theme.ts";
 
 describe("parsePalette", () => {
-  it("reads the default palette from gg-theme's dark palette", () => {
-    for (const key of paletteKeys) {
-      expect(defaultPalette[key]).toBe(tokens.palette.dark[key]);
-    }
+  it("reads the default palette back unchanged", () => {
+    expect(parsePalette(defaultPalette)).toStrictEqual(defaultPalette);
   });
 
   it("lower-cases colours and drops extra keys", () => {
@@ -44,38 +42,62 @@ describe("parsePalette", () => {
   });
 });
 
-describe("paletteFromTokensFile", () => {
-  it("imports gg-theme's own tokens.json", () => {
-    const imported = paletteFromTokensFile(tokensFile);
+describe("palette files", () => {
+  it("reads back what it exported", () => {
+    const palette = { ...defaultPalette, bg: "#101112", red: "#ff0000" };
 
-    expect("error" in imported).toBe(false);
-    expect(
-      "error" in imported ? false : samePalette(imported, defaultPalette)
-    ).toBe(true);
+    expect(paletteFromFile(paletteToFile(palette))).toStrictEqual(palette);
   });
 
   it.each([
     ["not JSON", "{", "not valid JSON"],
-    ["JSON without palette.dark", '{"palette":{}}', "no palette.dark"],
     [
-      "a palette.dark missing colours",
-      '{"palette":{"dark":{"bg":"#000000"}}}',
-      "needs a #rrggbb colour",
+      "colours missing or malformed",
+      JSON.stringify({ ...defaultPalette, fg: "#fff", cyan: undefined }),
+      "needs a #rrggbb colour for: fg, cyan.",
     ],
+    ["a JSON array", "[]", `for: ${paletteKeys.join(", ")}.`],
   ])("explains %s", (_label, text, message) => {
-    const imported = paletteFromTokensFile(text);
+    const imported = paletteFromFile(text);
 
     expect("error" in imported ? imported.error : "").toContain(message);
   });
 });
 
 describe("createTheme", () => {
-  it("derives the tiers gg-theme publishes for its own palette", () => {
-    expect(defaultTheme).toStrictEqual({
-      ...defaultPalette,
-      ...tokens.tiers.dark,
-    });
-  });
+  it.each([
+    ["the default palette", defaultPalette],
+    [
+      "hues too dark to read as they are",
+      {
+        ...defaultPalette,
+        red: "#5a0000",
+        blue: "#00205a",
+        accent: "#3a1a4a",
+      },
+    ],
+  ])(
+    "makes soft text readable and quiet marks visible for %s",
+    (_label, palette) => {
+      const theme = createTheme(palette);
+
+      const ratio = (x: keyof Theme, y: keyof Theme): number =>
+        contrast(parseHex(theme[x]), parseHex(theme[y]));
+
+      for (const hue of hueNames) {
+        for (const background of [
+          "bg",
+          "surface",
+          "wash",
+          ...hueNames.map((other) => `wash-${other}` as const),
+        ] as const) {
+          expect(ratio(`soft-${hue}`, background)).toBeGreaterThanOrEqual(4.5);
+        }
+
+        expect(ratio(`quiet-${hue}`, "bg")).toBeGreaterThanOrEqual(3);
+      }
+    }
+  );
 
   it("follows a custom background", () => {
     const theme = createTheme({ ...defaultPalette, bg: "#101010" });

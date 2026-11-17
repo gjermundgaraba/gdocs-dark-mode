@@ -1,6 +1,3 @@
-import { hueNames } from "@gjermundgaraba/gg-theme/derive";
-import type { HueName } from "@gjermundgaraba/gg-theme/derive";
-
 import {
   readPalette,
   resetPalette,
@@ -8,11 +5,13 @@ import {
 } from "../settings/settings.ts";
 import {
   defaultPalette,
-  paletteFromTokensFile,
+  hueNames,
+  paletteFromFile,
   paletteKeys,
+  paletteToFile,
   samePalette,
 } from "../theme/palette.ts";
-import type { Palette, PaletteKey } from "../theme/palette.ts";
+import type { HueName, Palette, PaletteKey } from "../theme/palette.ts";
 import type { Theme } from "../theme/theme.ts";
 import { readHexInput, viewEditor } from "./editor.ts";
 import type { EditorState } from "./editor.ts";
@@ -170,7 +169,7 @@ const start = async (): Promise<void> => {
   }
 
   const importFile = async (file: File): Promise<void> => {
-    const imported = paletteFromTokensFile(await file.text());
+    const imported = paletteFromFile(await file.text());
 
     if ("error" in imported) {
       render(`Not imported: ${imported.error}`);
@@ -190,6 +189,13 @@ const start = async (): Promise<void> => {
         render(`Not imported: ${describeError(error)}`);
       });
     }
+  });
+
+  required("#export", HTMLButtonElement).addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.href = `data:application/json;charset=utf-8,${encodeURIComponent(paletteToFile(state.draft))}`;
+    link.download = "dark-mode-for-google-docs-colours.json";
+    link.click();
   });
 
   required("#default", HTMLButtonElement).addEventListener("click", () => {

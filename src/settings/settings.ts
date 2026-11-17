@@ -21,8 +21,8 @@ export const writeEnabled = async (enabled: boolean): Promise<void> => {
 
 /**
  * The palette documents are themed with: the saved one, or the default when
- * none is saved or the saved one could no longer be saved, as after a gg-theme
- * update that cannot derive its tiers.
+ * none is saved or the saved one could no longer be saved, as after a change
+ * to how its tiers are derived.
  */
 export const readPalette = async (): Promise<Palette> => {
   const stored = await chrome.storage.local.get(paletteKey);

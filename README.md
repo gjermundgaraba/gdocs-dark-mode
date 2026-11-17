@@ -1,6 +1,6 @@
 # gdocs-dark-mode
 
-A Chrome extension that themes Google Docs, including the document page, with the gg dark palette or your own colours.
+A Chrome extension that gives Google Docs, including the document page, a dark theme in neutral greys or your own colours.
 
 Docs draws its pages on `<canvas>`, so CSS cannot reach them. The extension recolours each canvas draw call instead: white paper becomes the theme background, black text becomes the theme foreground, and greys keep their contrast. Coloured text snaps to the nearest palette hue, and highlights become the theme's tints. Images are untouched. Toolbars, menus and dialogs are themed through Google's own colour tokens.
 
@@ -17,13 +17,11 @@ Click the icon to switch dark mode on or off; open Docs tabs reload with the cha
 
 ## Colours
 
-Right-click the icon and choose **Options**. Set each colour with its picker or as `#rrggbb`, or import the `palette.dark` colours from a gg-theme `tokens.json`. The washes, tints and soft text colours are derived from these by gg-theme's own code. Problems that make a palette unusable block saving; low contrast shows as a warning. Saving reloads open Docs tabs. **Use gg default** goes back to the built-in palette, which then follows `@gjermundgaraba/gg-theme` updates.
+Right-click the icon and choose **Options**. Set each colour with its picker or as `#rrggbb`. **Export** saves the colours shown to a JSON file, and **Import** reads one back as unsaved changes. The washes, tints and soft text colours are derived from these. Problems that make a palette unusable block saving; low contrast shows as a warning. Saving reloads open Docs tabs. **Use default** goes back to the built-in palette, which then follows changes to the default in later versions.
 
-Only the 14 colours Docs uses can be set; gg-theme's terminal and cursor colours are ignored on import.
+## Changing the default palette
 
-## Updating the default palette
-
-The default palette comes from `@gjermundgaraba/gg-theme`. Bump its version in `pnpm-workspace.yaml`, run `pnpm install && pnpm run render-icons && pnpm run build`, and reload the extension. The toolbar icon is drawn in the default theme's colours, hence `render-icons`.
+The default palette is `defaultPalette` in `src/theme/palette.ts`. Change it, run `pnpm run render-icons && pnpm run build`, and reload the extension. The toolbar icon is drawn in the default theme's colours, hence `render-icons`.
 
 ## Publishing
 

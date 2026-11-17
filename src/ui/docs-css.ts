@@ -1,8 +1,7 @@
-import type { HueName } from "@gjermundgaraba/gg-theme/derive";
-
 import { mix, parseHex, toHex, toRgbTriplet } from "../color/color.ts";
 import { ownCaretSelector, pageSelector } from "../docs/docs.ts";
 import type { GoogleExtendedHue } from "../docs/docs.ts";
+import type { HueName } from "../theme/palette.ts";
 import type { Theme } from "../theme/theme.ts";
 
 const black = "#000000";
@@ -144,7 +143,7 @@ const declarations = (
  */
 export const renderDocsCss = (theme: Theme): string =>
   [
-    "/* gdocs-dark-mode — generated from @gjermundgaraba/gg-theme. Do not edit. */",
+    "/* gdocs-dark-mode — generated from the saved palette. Do not edit. */",
     "",
     "html:root {",
     "  color-scheme: dark;",

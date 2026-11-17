@@ -151,6 +151,10 @@ export const toOklch = (color: Rgba): Oklch => {
   return { l, c: Math.hypot(a, b), h: Math.atan2(b, a) };
 };
 
+/** The opaque sRGB colour nearest an OKLCH one, clamped into gamut. */
+export const fromOklch = ({ l, c, h }: Oklch): Rgba =>
+  fromOklab({ l, a: c * Math.cos(h), b: c * Math.sin(h) }, 1);
+
 /** Interpolates in OKLab; `amount` 0 gives `from`, 1 gives `to`. Alpha comes from `from`. */
 export const mix = (from: Rgba, to: Rgba, amount: number): Rgba => {
   const [x, y] = [toOklab(from), toOklab(to)];

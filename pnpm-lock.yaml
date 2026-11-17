@@ -170,9 +170,6 @@ catalogs:
     '@effect/tsgo':
       specifier: 0.67.7
       version: 0.67.7
-    '@gjermundgaraba/gg-theme':
-      specifier: 0.6.0
-      version: 0.6.0
     '@types/chrome':
       specifier: 0.3.7
       version: 0.3.7
@@ -215,9 +212,6 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.67.7
-      '@gjermundgaraba/gg-theme':
-        specifier: 'catalog:'
-        version: 0.6.0
       '@types/chrome':
         specifier: 'catalog:'
         version: 0.3.7
@@ -330,9 +324,6 @@ packages:
   '@effect/tsgo@0.67.7':
     resolution: {integrity: sha512-1OPkF+7L11BGGonHsgVgfplCqEq0AkoXWcr55hfs4KomhTdRhfSAzuHbRXWoloobVRNF3i7ZgABHm6xeJ5H9Tg==}
     hasBin: true
-
-  '@gjermundgaraba/gg-theme@0.6.0':
-    resolution: {integrity: sha512-YpGozlqadgI6OkaX43WkELEr2WNbW5bcWbhPvMmyYQmF0xZTWZsnxMvhbqJAC4tI08t/AOc59eYIELawObS7uA==}
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -1757,8 +1748,6 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.67.7
       '@effect/tsgo-win32-arm64': 0.67.7
       '@effect/tsgo-win32-x64': 0.67.7
-
-  '@gjermundgaraba/gg-theme@0.6.0': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 

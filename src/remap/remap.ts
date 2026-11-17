@@ -1,6 +1,3 @@
-import { hueNames } from "@gjermundgaraba/gg-theme/derive";
-import type { HueName } from "@gjermundgaraba/gg-theme/derive";
-
 import {
   contrast,
   hueDistance,
@@ -15,6 +12,8 @@ import {
 } from "../color/color.ts";
 import type { Rgba } from "../color/color.ts";
 import type { CanvasColorMeaning, KnownCanvasColor } from "../docs/docs.ts";
+import { hueNames } from "../theme/palette.ts";
+import type { HueName } from "../theme/palette.ts";
 import type { Theme } from "../theme/theme.ts";
 
 /**

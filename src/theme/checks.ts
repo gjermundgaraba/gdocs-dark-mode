@@ -1,13 +1,8 @@
-import {
-  checkPalette,
-  contrast,
-  hueNames,
-  toOklch,
-} from "@gjermundgaraba/gg-theme/derive";
-
-import type { Palette } from "./palette.ts";
-import { createTheme } from "./theme.ts";
-import type { Theme } from "./theme.ts";
+import { contrast, parseHex, toOklch } from "../color/color.ts";
+import { hueNames } from "./palette.ts";
+import type { Palette, PaletteKey } from "./palette.ts";
+import { createTheme, nonTextContrast, textContrast } from "./theme.ts";
+import type { Theme, TierName } from "./theme.ts";
 
 export interface PaletteReview {
   /** The palette's theme, or `undefined` when it has errors. */
@@ -18,38 +13,61 @@ export interface PaletteReview {
   readonly warnings: readonly string[];
 }
 
-const textContrast = 4.5;
+type ThemeKey = PaletteKey | TierName;
 
-const below = (
-  label: string,
-  foreground: string,
-  background: string,
-  minimum: number
-): string[] => {
-  const ratio = contrast(foreground, background);
+const fgOnWashContrast = 7;
 
-  return ratio < minimum
-    ? [`${label} contrast is ${ratio.toFixed(2)}; need ${minimum}`]
-    : [];
-};
+const textColors = [
+  "fg-dim",
+  ...hueNames.filter((hue) => hue !== "accent"),
+] as const;
 
-const extensionRules = (theme: Theme): string[] => [
-  ...below("fg/selection-bg", theme.fg, theme["selection-bg"], textContrast),
-  ...hueNames.flatMap((ink) =>
-    hueNames.flatMap((highlight) => {
-      const [soft, tint] = [theme[`soft-${ink}`], theme[`tint-${highlight}`]];
-
-      return below(
-        `soft-${ink}/tint-${highlight} (${soft} on ${tint})`,
-        soft,
-        tint,
-        textContrast
-      );
-    })
+const pairs: ReadonlyArray<[ThemeKey, ThemeKey, number]> = [
+  ["accent", "bg", nonTextContrast],
+  ["fg", "bg", textContrast],
+  ["overlay", "bg", nonTextContrast],
+  ["fg", "overlay", nonTextContrast],
+  ["fg-dim", "surface", textContrast],
+  ["fg", "selection-bg", textContrast],
+  ...textColors.flatMap((color): Array<[ThemeKey, ThemeKey, number]> =>
+    (["bg", "surface", "selection-bg"] as const).map((background) => [
+      color,
+      background,
+      textContrast,
+    ])
   ),
+  ...hueNames.flatMap((hue): Array<[ThemeKey, ThemeKey, number]> => [
+    ["fg", `wash-${hue}`, fgOnWashContrast],
+    ["fg", `tint-${hue}`, fgOnWashContrast],
+    ...textColors.map((color): [ThemeKey, ThemeKey, number] => [
+      color,
+      `tint-${hue}`,
+      textContrast,
+    ]),
+    ...hueNames.map((ink): [ThemeKey, ThemeKey, number] => [
+      `soft-${ink}`,
+      `tint-${hue}`,
+      textContrast,
+    ]),
+  ]),
+  ["fg", "wash", fgOnWashContrast],
 ];
 
-const lightness = (hex: string): number => toOklch(hex)[0];
+const contrastWarnings = (theme: Theme): string[] =>
+  pairs.flatMap(([foreground, background, minimum]) => {
+    const ratio = contrast(
+      parseHex(theme[foreground]),
+      parseHex(theme[background])
+    );
+
+    return ratio < minimum
+      ? [
+          `${foreground}/${background} (${theme[foreground]} on ${theme[background]}) contrast is ${ratio.toFixed(2)}; need ${minimum}`,
+        ]
+      : [];
+  });
+
+const lightness = (hex: string): number => toOklch(parseHex(hex)).l;
 
 const rejected = (error: string): PaletteReview => ({
   theme: undefined,
@@ -59,10 +77,10 @@ const rejected = (error: string): PaletteReview => ({
 
 /**
  * A palette's theme and everything wrong with it as a dark theme for Docs.
- * Errors: BG is not darker than FG, or gg-theme cannot derive a readable
- * tier. Warnings: gg-theme's own contrast rules, FG on the selection, and
- * coloured text (Soft) on every highlight (Tint), which is how Docs' coloured
- * text on highlights is drawn.
+ * Errors: BG is not darker than FG, or a soft or quiet tier cannot be made
+ * readable. Warnings: text below 4.5:1 on its backgrounds (FG below 7:1 on
+ * the washes and tints), marks below 3:1, and coloured text (Soft) on every
+ * highlight (Tint), which is how Docs' coloured text on highlights is drawn.
  */
 export const reviewPalette = (palette: Palette): PaletteReview => {
   if (lightness(palette.bg) >= lightness(palette.fg)) {
@@ -77,9 +95,5 @@ export const reviewPalette = (palette: Palette): PaletteReview => {
     return rejected(error instanceof Error ? error.message : String(error));
   }
 
-  return {
-    theme,
-    errors: [],
-    warnings: [...checkPalette("dark", palette), ...extensionRules(theme)],
-  };
+  return { theme, errors: [], warnings: contrastWarnings(theme) };
 };

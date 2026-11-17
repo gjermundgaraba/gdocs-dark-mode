@@ -1,11 +1,22 @@
-import { hueNames } from "@gjermundgaraba/gg-theme/derive";
-import tokens from "@gjermundgaraba/gg-theme/tokens" with { type: "json" };
-
 import { isHexColor } from "../color/color.ts";
 
+/** The hues coloured text and highlights snap to, `accent` first. */
+export const hueNames = [
+  "accent",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "orange",
+] as const;
+
+export type HueName = (typeof hueNames)[number];
+
 /**
- * The colours a user can set, under gg-theme's `tokens.json` names. Everything
- * else the extension paints with is derived from them.
+ * The colours a user can set. Everything else the extension paints with is
+ * derived from them.
  */
 export const paletteKeys = [
   "bg",
@@ -53,22 +64,40 @@ export const parsePalette = (value: unknown): Palette | undefined => {
   return isComplete(palette) ? palette : undefined;
 };
 
-/** The gg dark palette the extension ships with. */
-export const defaultPalette: Palette = (() => {
-  const palette = parsePalette(tokens.palette.dark);
-
-  if (palette === undefined) {
-    throw new Error("gg-theme's dark palette is missing a colour");
-  }
-
-  return palette;
-})();
+/**
+ * The palette the extension ships with: neutral greys and the pastel hues of
+ * Google's own dark themes, so the default looks at home in Docs.
+ */
+export const defaultPalette: Palette = {
+  bg: "#202124",
+  surface: "#303134",
+  overlay: "#80868b",
+  fg: "#e8eaed",
+  "fg-dim": "#9aa0a6",
+  "selection-bg": "#2b374b",
+  accent: "#8ab4f8",
+  red: "#f28b82",
+  green: "#81c995",
+  yellow: "#fdd663",
+  blue: "#8ab4f8",
+  magenta: "#d7aefb",
+  cyan: "#78d9ec",
+  orange: "#fcad70",
+};
 
 /**
- * Reads the dark palette from a gg-theme `tokens.json`, the file
- * `@gjermundgaraba/gg-theme/tokens` publishes.
+ * The file Export writes and Import reads: a JSON object with a `#rrggbb`
+ * colour under each of `paletteKeys`, in that order.
  */
-export const paletteFromTokensFile = (
+export const paletteToFile = (palette: Palette): string =>
+  `${JSON.stringify(
+    Object.fromEntries(paletteKeys.map((key) => [key, palette[key]])),
+    undefined,
+    2
+  )}\n`;
+
+/** Reads a file `paletteToFile` wrote, or explains why it cannot. */
+export const paletteFromFile = (
   text: string
 ): Palette | { readonly error: string } => {
   let json: unknown;
@@ -79,18 +108,11 @@ export const paletteFromTokensFile = (
     return { error: "The file is not valid JSON." };
   }
 
-  const dark = field(field(json, "palette"), "dark");
-
-  if (dark === undefined) {
-    return {
-      error:
-        "The file has no palette.dark, so it is not a gg-theme tokens.json.",
-    };
-  }
+  const missing = paletteKeys.filter((key) => !isHexColor(field(json, key)));
 
   return (
-    parsePalette(dark) ?? {
-      error: `palette.dark needs a #rrggbb colour for each of: ${paletteKeys.join(", ")}.`,
+    parsePalette(json) ?? {
+      error: `The file needs a #rrggbb colour for: ${missing.join(", ")}.`,
     }
   );
 };
