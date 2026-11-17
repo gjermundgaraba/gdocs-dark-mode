@@ -155,7 +155,7 @@ const promoTileHtml = (icon: Buffer): string => `
       background: ${defaultTheme.bg}; color: ${defaultTheme.fg};
       font-family: system-ui, sans-serif;
     }
-    img { width: 112px; height: 112px; }
+    img { width: 144px; height: 144px; margin: 0 -16px; }
     h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.15; font-weight: 600; }
     p { margin: 0; font-size: 16px; color: ${defaultTheme["fg-dim"]}; }
   </style>
