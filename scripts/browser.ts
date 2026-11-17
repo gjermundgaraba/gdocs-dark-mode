@@ -29,10 +29,12 @@ export interface DocumentArgs {
 }
 
 /**
- * `--url <document>` (default: the public document) and `--headed` to watch
- * the browser. A leading `--`, which pnpm passes through, is ignored.
+ * `--url <document>` (default: `defaultUrl`) and `--headed` to watch the
+ * browser. A leading `--`, which pnpm passes through, is ignored.
  */
-export const parseDocumentArgs = (): DocumentArgs => {
+export const parseDocumentArgs = (
+  defaultUrl: string = publicDocUrl
+): DocumentArgs => {
   const [first, ...rest] = process.argv.slice(2);
 
   const { values } = parseArgs({
@@ -43,7 +45,7 @@ export const parseDocumentArgs = (): DocumentArgs => {
     },
   });
 
-  return { url: values.url ?? publicDocUrl, headed: values.headed };
+  return { url: values.url ?? defaultUrl, headed: values.headed };
 };
 
 /** Where scripts write reports and screenshots. */
@@ -66,6 +68,14 @@ export const waitUntil = async (
 
   throw new Error(`timed out waiting for ${label}`);
 };
+
+/** A browser window's size in CSS pixels. */
+export interface Viewport {
+  readonly width: number;
+  readonly height: number;
+}
+
+const defaultViewport: Viewport = { width: 1400, height: 1000 };
 
 export interface LoadedExtension {
   readonly context: BrowserContext;
@@ -97,14 +107,15 @@ const waitForRegistration = async (optionsPage: Page): Promise<void> => {
  */
 export const launchWithExtension = async (
   headed: boolean,
-  profile: string
+  profile: string,
+  viewport: Viewport = defaultViewport
 ): Promise<LoadedExtension> => {
   await rm(profile, { recursive: true, force: true });
 
   const context = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
     headless: !headed,
-    viewport: { width: 1400, height: 1000 },
+    viewport,
     args: [
       `--disable-extensions-except=${extensionDir}`,
       `--load-extension=${extensionDir}`,
@@ -142,8 +153,8 @@ export const waitForDocsToDraw = async (page: Page): Promise<void> => {
   await page.waitForTimeout(3000);
 };
 
-/** Opens `url` with diagnostics on and waits until Docs has drawn and settled. */
-export const openWithDiagnostics = async (
+/** Opens `url` in a new tab, failing if the document needs a sign-in. */
+export const openDocument = async (
   context: BrowserContext,
   url: string
 ): Promise<Page> => {
@@ -155,6 +166,16 @@ export const openWithDiagnostics = async (
       `${url} needs a Google sign-in, which these scripts do not support; use a public document`
     );
   }
+
+  return page;
+};
+
+/** Opens `url` with diagnostics on and waits until Docs has drawn and settled. */
+export const openWithDiagnostics = async (
+  context: BrowserContext,
+  url: string
+): Promise<Page> => {
+  const page = await openDocument(context, url);
 
   await page.evaluate((key) => {
     localStorage.setItem(key, "1");

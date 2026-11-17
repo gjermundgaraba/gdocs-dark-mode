@@ -10,6 +10,7 @@
     "verify": "vpx ./scripts/build.ts && vpx ./scripts/verify.ts",
     "package": "vpx ./scripts/build.ts && vpx ./scripts/package.ts",
     "render-icons": "vpx ./scripts/render-icons.ts",
+    "store-assets": "vpx ./scripts/build.ts && vpx ./scripts/store-assets.ts",
     "ready": "vp check && vp test && vp run build",
     "prepare": "vp config && effect-tsgo patch --no-typescript --oxlint",
     "inspect": "vpx ./scripts/build.ts && vpx ./scripts/inspect.ts",

@@ -68,7 +68,8 @@ export const syncPageScript = async (enabled: boolean): Promise<void> => {
   }
 };
 
-const documentsPaletteKey = "documentsPalette";
+/** The storage key under which the palette open documents were last reloaded with is kept. */
+export const documentsPaletteKey = "documentsPalette";
 
 const readDocumentsPalette = async (): Promise<Palette | undefined> => {
   const stored = await chrome.storage.local.get(documentsPaletteKey);

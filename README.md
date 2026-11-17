@@ -25,6 +25,8 @@ The default palette is `defaultPalette` in `src/theme/palette.ts`. Change it, ru
 
 ## Publishing
 
+`CHROMEWEBSTORE.md` has the listing copy, permission justifications and privacy answers for the developer dashboard, and a checklist to run before each upload. `PRIVACY.md` is the privacy policy. `pnpm run store-assets` renders the screenshots and promo tile into `store/`.
+
 Bump `version` in `package.json` (the Chrome Web Store rejects an upload whose version is not higher than the last), then run `pnpm run package` and upload `gdocs-dark-mode-<version>.zip` in the developer dashboard.
 
 ## When Docs breaks it
